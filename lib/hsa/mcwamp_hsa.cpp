@@ -31,6 +31,9 @@
 #include <kalmar_runtime.h>
 #include <kalmar_aligned_alloc.h>
 
+#include <hc_am.hpp>
+#include <staging_buffer.h>
+
 #include <time.h>
 #include <iomanip>
 
@@ -469,6 +472,13 @@ region_iterator::region_iterator()
 ///
 namespace Kalmar {
 
+enum memcpyKind {
+   hipMemcpyHostToHost = 0    
+  ,hipMemcpyHostToDevice = 1  
+  ,hipMemcpyDeviceToHost = 2  
+  ,hipMemcpyDeviceToDevice =3 
+  ,hipMemcpyDefault =4 
+} ;
 
 class HSAQueue final : public KalmarQueue
 {
@@ -855,6 +865,10 @@ public:
         }
     }
 
+    void copy(const void *src, void *dst, size_t size_bytes) override {
+        syncCopy(src, dst, size_bytes, hipMemcpyDefault);
+    }
+
     void* getHSAQueue() override {
         return static_cast<void*>(commandQueue);
     }
@@ -896,7 +910,12 @@ public:
             }
         }
     }
+
+
+    void syncCopy(const void* src, void *dst, size_t sizeBytes, memcpyKind kind) ;
 };
+
+
 
 class HSADevice final : public KalmarDevice
 {
@@ -927,6 +946,12 @@ private:
     hsa_isa_t agentISA;
 
     hcAgentProfile profile;
+
+public:
+    // Structures to manage staging buffers and copies:
+    hsa_signal_t             copy_signal;       // signal to use for synchronous memcopies
+    class StagingBuffer      *staging_buffer[2]; // one buffer for each direction.
+    std::mutex               copy_lock[2];      // mutex for each direction.
 
 public:
  
@@ -1163,6 +1188,14 @@ public:
         } else if (agentProfile == HSA_PROFILE_FULL) {
             profile = hcAgentProfileFull;
         }
+
+        // Setup for synchronous copies:
+        hsa_signal_create(0, 0, NULL, &copy_signal);
+
+        static const size_t stagingSize = 64*1024;
+        hsa_region_t systemRegion = getHSAAMHostRegion();
+        staging_buffer[0] = new StagingBuffer(agent, systemRegion, stagingSize, 2/*staging buffers*/);
+        staging_buffer[1] = new StagingBuffer(agent, systemRegion, stagingSize, 2/*staging Buffers*/);
     }
 
     ~HSADevice() {
@@ -1211,6 +1244,16 @@ public:
             delete executable_iterator.second;
         }
         executables.clear();
+
+
+        for (int i=0; i<2; i++) {
+            if (staging_buffer[i]) {
+                delete staging_buffer[i];
+                staging_buffer[i] = NULL;
+            }
+        }
+        hsa_signal_destroy(copy_signal);
+
 
 #if KALMAR_DEBUG
         std::cerr << "HSADevice::~HSADevice() out\n";
@@ -1688,6 +1731,7 @@ public:
     hcAgentProfile getProfile() override { return profile; }
 
 private:
+    void syncCopy(void* dst, const void* src, size_t sizeBytes, memcpyKind kind);
 
     void BuildOfflineFinalizedProgramImpl(void* kernelBuffer, int kernelSize) {
         hsa_status_t status;
@@ -2135,6 +2179,92 @@ HSAQueue::getHSAAMHostRegion() override {
 inline void*
 HSAQueue::getHSAKernargRegion() override {
     return static_cast<void*>(&(static_cast<HSADevice*>(getDev())->getHSAKernargRegion()));
+}
+
+
+void 
+HSAQueue::syncCopy(const void* src, void *dst, size_t sizeBytes, memcpyKind kind) 
+{
+    printf ("===> syncCopy!\n");
+    // TODOD - add parms to {srcMapped, dstMapped}  = {Yes, No, Unknown}
+    hc::accelerator acc;
+    hc::AmPointerInfo dstPtrInfo(NULL, NULL, 0, acc, 0, 0);
+    hc::AmPointerInfo srcPtrInfo(NULL, NULL, 0, acc, 0, 0);
+
+    bool dstNotTracked = (hc::am_memtracker_getinfo(&dstPtrInfo, dst) != AM_SUCCESS);
+    bool srcNotTracked = (hc::am_memtracker_getinfo(&srcPtrInfo, src) != AM_SUCCESS);
+
+
+    // Resolve default to a specific Kind so we know which algorithm to use:
+    if (kind == hipMemcpyDefault) {
+        bool dstIsHost = (dstNotTracked || !dstPtrInfo._isInDeviceMem);
+        bool srcIsHost = (srcNotTracked || !srcPtrInfo._isInDeviceMem);
+        if (srcIsHost && !dstIsHost) {
+            kind = hipMemcpyHostToDevice;
+        } else if (!srcIsHost && dstIsHost) {
+            kind = hipMemcpyDeviceToHost;
+        } else if (srcIsHost && dstIsHost) {
+            kind = hipMemcpyHostToHost;
+        } else if (!srcIsHost && !dstIsHost) {
+            kind = hipMemcpyDeviceToDevice;
+        } else {
+            // Invalid copy direction:
+            throw Kalmar::runtime_exception("invalid copy direction", 0);
+        }
+    }
+
+    hsa_signal_t depSignal;
+#ifdef STREAM_DEP
+    int depSignalCnt = this->preCopyCommand(NULL, &depSignal, ihipCommandCopyH2D);
+#else
+    int depSignalCnt = 0;
+#endif
+
+    HSADevice *device = static_cast<HSADevice*> (getDev()); // seems this should work..
+    //HSADevice *device = reinterpret_cast<HSADevice*> (getDev());
+
+
+    if ((kind == hipMemcpyHostToDevice) && (srcNotTracked)) {
+        std::lock_guard<std::mutex> l (device->copy_lock[0]);
+
+        device->staging_buffer[0]->CopyHostToDevice(dst, src, sizeBytes, depSignalCnt ? &depSignal : NULL);
+#ifdef STREAM_DEP
+        // The copy waits for inputs and then completes before returning so can reset queue to empty:
+        this->resetToEmpty();
+#endif
+    } else if ((kind == hipMemcpyDeviceToHost) && (dstNotTracked)) {
+        std::lock_guard<std::mutex> l (device->copy_lock[1]);
+        //printf ("staged-copy- read dep signals\n");
+        device->staging_buffer[1]->CopyDeviceToHost(dst, src, sizeBytes, depSignalCnt ? &depSignal : NULL);
+    } else if (kind == hipMemcpyHostToHost)  { 
+
+#ifdef STREAM_DEP
+        if (depSignalCnt) {
+            // host waits before doing host memory copy.
+            hsa_signal_wait_acquire(depSignal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_ACTIVE);
+        }
+#endif
+        memcpy(dst, src, sizeBytes);
+
+    } else {
+        // Remaining commands - these can all be handled by the hsa async copy:
+
+       
+        // Lock since we share a signal: 
+        device->copy_lock[1].lock();
+
+        hsa_signal_store_relaxed(device->copy_signal, 1);
+
+        hsa_status_t hsa_status = hsa_amd_memory_async_copy(dst, device->getAgent(), src, device->getAgent(), sizeBytes, depSignalCnt, depSignalCnt ? &depSignal:0x0, device->copy_signal);
+
+        if (hsa_status == HSA_STATUS_SUCCESS) {
+            hsa_signal_wait_relaxed(device->copy_signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_ACTIVE);
+        } else {
+            throw Kalmar::runtime_exception("hsa_amd_memory_async_copy error", hsa_status);
+        }
+
+        device->copy_lock[1].unlock();
+    }
 }
 
 } // namespace Kalmar
