@@ -472,14 +472,6 @@ region_iterator::region_iterator()
 ///
 namespace Kalmar {
 
-enum memcpyKind {
-   memcpyHostToHost = 0    
-  ,memcpyHostToDevice = 1  
-  ,memcpyDeviceToHost = 2  
-  ,memcpyDeviceToDevice =3 
-  ,memcpyAutoDetect =4 
-} ;
-
 class HSAQueue final : public KalmarQueue
 {
 private:
@@ -866,11 +858,11 @@ public:
     }
 
     void copy(const void *src, void *dst, size_t size_bytes) override {
-        copySync(src, false, false, dst, false, false, size_bytes, memcpyAutoDetect);
+        copySync(src, false, false, dst, false, false, size_bytes);
     }
 
     void copy_async(const void *src, void *dst, size_t size_bytes) override {
-        copyAsync(src, dst, size_bytes, memcpyAutoDetect);
+        copyAsync(src, dst, size_bytes);
     }
 
     void* getHSAQueue() override {
@@ -916,9 +908,9 @@ public:
     }
 
 
-    void copySync(const void* src, bool srcIsMapped, bool srcInDeviceMem, void *dst, bool dstIsMapped, bool dstInDeviceMem, size_t sizeBytes, memcpyKind kind) ;
+    void copySync(const void* src, bool srcIsMapped, bool srcInDeviceMem, void *dst, bool dstIsMapped, bool dstInDeviceMem, size_t sizeBytes) ;
     void copyAsyncMappedPtrs(const void* src, void *dst, size_t sizeBytes) ;
-    void copyAsync(const void* src, void *dst, size_t sizeBytes, memcpyKind kind) ;
+    void copyAsync(const void* src, void *dst, size_t sizeBytes) ;
 };
 
 
@@ -2199,8 +2191,14 @@ HSAQueue::getHSAKernargRegion() override {
 //
 // The copies are performed synchronously - the routine waits until the copy completes before returning.
 void 
-HSAQueue::copySync(const void* src, bool srcIsMapped, bool srcInDeviceMem, void *dst, bool dstIsMapped, bool dstInDeviceMem, size_t sizeBytes, memcpyKind kind) 
+HSAQueue::copySync(const void* src, bool srcIsMapped, bool srcInDeviceMem, void *dst, bool dstIsMapped, bool dstInDeviceMem, size_t sizeBytes) 
 {
+enum memcpyKind {
+   memcpyHostToHost = 0    
+  ,memcpyHostToDevice = 1  
+  ,memcpyDeviceToHost = 2  
+  ,memcpyDeviceToDevice =3 
+} ;
     hc::accelerator acc;
     hc::AmPointerInfo srcPtrInfo(NULL, NULL, 0, acc, 0, 0);
     hc::AmPointerInfo dstPtrInfo(NULL, NULL, 0, acc, 0, 0);
@@ -2222,19 +2220,18 @@ HSAQueue::copySync(const void* src, bool srcIsMapped, bool srcInDeviceMem, void 
 
 
     // Resolve default to a specific Kind so we know which algorithm to use:
-    if (kind == memcpyAutoDetect) {
-        if (!srcInDeviceMem && !dstInDeviceMem) {
-            kind = memcpyHostToHost;
-        } else if (!srcInDeviceMem && dstInDeviceMem) {
-            kind = memcpyHostToDevice;
-        } else if (srcInDeviceMem && !dstInDeviceMem) {
-            kind = memcpyDeviceToHost;
-        } else if (srcInDeviceMem &&  dstInDeviceMem) {
-            kind = memcpyDeviceToDevice;
-        } else {
-            // Invalid copy direction:
-            throw Kalmar::runtime_exception("invalid copy direction", 0);
-        }
+    memcpyKind kind;
+    if (!srcInDeviceMem && !dstInDeviceMem) {
+        kind = memcpyHostToHost;
+    } else if (!srcInDeviceMem && dstInDeviceMem) {
+        kind = memcpyHostToDevice;
+    } else if (srcInDeviceMem && !dstInDeviceMem) {
+        kind = memcpyDeviceToHost;
+    } else if (srcInDeviceMem &&  dstInDeviceMem) {
+        kind = memcpyDeviceToDevice;
+    } else {
+        // Invalid copy direction - should never reach here since we cover all 4 possible options above.
+        Kalmar::runtime_exception("invalid copy direction", 0);
     }
 
     hsa_signal_t depSignal;
@@ -2321,7 +2318,7 @@ HSAQueue::copyAsyncMappedPtrs(const void* src, void *dst, size_t sizeBytes)
 }
 
 void
-HSAQueue::copyAsync(const void* src, void *dst, size_t sizeBytes, memcpyKind kind) 
+HSAQueue::copyAsync(const void* src, void *dst, size_t sizeBytes) 
 {
     hc::accelerator acc;
     hc::AmPointerInfo srcPtrInfo(NULL, NULL, 0, acc, 0, 0);
@@ -2335,7 +2332,7 @@ HSAQueue::copyAsync(const void* src, void *dst, size_t sizeBytes, memcpyKind kin
         // Fall back to synchronous copy:
         copySync(src, srcIsMapped, srcPtrInfo._isInDeviceMem, 
                  dst, dstIsMapped, dstPtrInfo._isInDeviceMem, 
-                 sizeBytes, kind);
+                 sizeBytes);
     } else {
         copyAsyncMappedPtrs(src, dst, sizeBytes);
     }
