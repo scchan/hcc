@@ -1956,14 +1956,14 @@ public:
         status = hsa_iterate_agents(&HSAContext::find_gpu, &agents);
         STATUS_CHECK(status, __LINE__);
 
-        int cpuCount = 0;
+        bool cpu_agent_found = false;
         for (int i = 0; i < agents.size(); ++i) {
             hsa_agent_t agent = agents[i];
             hsa_device_type_t device_type = HSA_DEVICE_TYPE_GPU;
             hsa_status_t status = hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
-            if (device_type == HSA_DEVICE_TYPE_CPU) {
+            if (!cpu_agent_found && (device_type == HSA_DEVICE_TYPE_CPU)) {
                 g_cpu_agent = agent;
-                cpuCount++;
+                cpu_agent_found = true;
             }
 
             auto Dev = new HSADevice(agent);
