@@ -249,7 +249,6 @@ public:
         pQueue->copy(src, dst, size_bytes);
     }
 
-
     /**
      * Copies size_bytes bytes from src to dst.  
      * Src and dst must not overlap.  
@@ -257,9 +256,7 @@ public:
      * The copy command will execute after any commands already inserted into the accelerator_view.
      * This is an asynchronous copy command, and this call may return before the copy operation completes.
      */
-    void copy_async(const void *src, void *dst, size_t size_bytes) {
-        pQueue->copy_async(src, dst, size_bytes);
-    }
+    completion_future copy_async(const void *src, void *dst, size_t size_bytes);
 
     /**
      * Compares "this" accelerator_view with the passed accelerator_view object
@@ -1120,6 +1117,11 @@ inline accelerator accelerator_view::get_accelerator() const { return pQueue->ge
 inline completion_future accelerator_view::create_marker() {
     return completion_future(pQueue->EnqueueMarker());
 }
+
+inline completion_future accelerator_view::copy_async(const void *src, void *dst, size_t size_bytes) {
+    return completion_future(pQueue->EnqueueAsyncCopy(src, dst, size_bytes));
+}
+
 
 // ------------------------------------------------------------------------
 // extent
