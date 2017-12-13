@@ -1,0 +1,12 @@
+digraph "grid_launch_parm"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="{grid_launch_parm\n|+ dynamic_group_mem_bytes\l+ barrier_bit\l+ launch_fence\l|+ grid_launch_parm()\l}",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [color="grey25",fontsize="10",style="solid",label=" +cf" ,arrowhead="odiamond",fontname="Helvetica"];
+  Node2 [label="{hc::completion_future\n||+ completion_future()\l+ completion_future()\l+ completion_future()\l+ operator=()\l+ operator=()\l+ get()\l+ valid()\l+ operator std::shared\l_future\< void \>()\l+ then()\l+ get_native_handle()\l+ get_begin_tick()\l+ get_end_tick()\l+ get_tick_frequency()\l+ is_ready()\l+ ~completion_future()\l+ get_use_count()\l+ wait()\l+ wait_for()\l+ wait_until()\l* wait()\l* wait_for()\l* wait_until()\l}",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classhc_1_1completion__future.html",tooltip="This class is the return type of all asynchronous APIs and has an interface analogous to std::shared_..."];
+  Node3 -> Node1 [color="grey25",fontsize="10",style="solid",label=" +grid_dim\n+group_dim" ,arrowhead="odiamond",fontname="Helvetica"];
+  Node3 [label="{gl_dim3\n|+ x\l+ y\l+ z\l|+ gl_dim3()\l}",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structgl__dim3.html"];
+  Node4 -> Node1 [color="grey25",fontsize="10",style="solid",label=" +av" ,arrowhead="odiamond",fontname="Helvetica"];
+  Node4 [label="{hc::accelerator_view\n||+ accelerator_view()\l+ operator=()\l+ get_queuing_mode()\l+ get_execute_order()\l+ get_is_auto_selection()\l+ get_version()\l+ get_accelerator()\l+ get_is_debug()\l+ wait()\l+ flush()\l+ create_marker()\l+ create_blocking_marker()\l+ create_blocking_marker()\l+ create_blocking_marker()\l+ copy()\l+ copy_ext()\l+ copy_ext()\l+ copy_async()\l+ copy_async_ext()\l+ operator==()\l+ operator!=()\l+ get_max_tile_static_size()\l+ get_pending_async_ops()\l+ get_is_empty()\l+ get_hsa_queue()\l+ get_hsa_agent()\l+ get_hsa_am_region()\l+ get_hsa_am_system_region()\l+ get_hsa_am_finegrained\l_system_region()\l+ get_hsa_kernarg_region()\l+ is_hsa_accelerator()\l+ dispatch_hsa_kernel()\l+ set_cu_mask()\l}",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classhc_1_1accelerator__view.html",tooltip="Represents a logical (isolated) accelerator view of a compute accelerator. "];
+}

@@ -1,0 +1,6 @@
+digraph "hc::accelerator"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="{hc::accelerator\n||+ accelerator()\l+ accelerator()\l+ accelerator()\l+ operator=()\l+ get_default_view()\l+ create_view()\l+ operator==()\l+ operator!=()\l+ set_default_cpu_access_type()\l+ get_device_path()\l+ get_description()\l+ get_version()\l+ get_has_display()\l+ get_dedicated_memory()\l+ get_supports_double\l_precision()\l+ get_supports_limited\l_double_precision()\l+ get_is_debug()\l+ get_is_emulated()\l+ get_supports_cpu_shared\l_memory()\l+ get_default_cpu_access_type()\l+ get_max_tile_static_size()\l+ get_all_views()\l+ get_hsa_am_region()\l+ get_hsa_am_system_region()\l+ get_hsa_am_finegrained\l_system_region()\l+ get_hsa_kernarg_region()\l+ is_hsa_accelerator()\l+ get_profile()\l+ memcpy_symbol()\l+ memcpy_symbol()\l+ get_symbol_address()\l+ get_hsa_agent()\l+ get_is_peer()\l+ get_peers()\l+ get_cu_count()\l+ get_seqnum()\l+ has_cpu_accessible_am()\l+ get_dev_ptr()\l+ get_all()\l+ set_default()\l+ get_auto_selection_view()\l}",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+}

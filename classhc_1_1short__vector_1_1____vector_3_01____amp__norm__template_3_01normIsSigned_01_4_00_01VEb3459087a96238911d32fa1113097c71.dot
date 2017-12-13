@@ -1,0 +1,10 @@
+digraph "hc::short_vector::__vector&lt; __amp_norm_template&lt; normIsSigned &gt;, VECTOR_LENGTH &gt;"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="{hc::short_vector::\l__vector\< __amp_norm\l_template\< normIsSigned\l \>, VECTOR_LENGTH \>\n|+ size\l|+ __vector()\l+ __vector()\l+ __vector()\l+ __vector()\l+ __vector()\l+ __vector()\l+ __vector()\l+ __vector()\l+ __vector()\l+ __vector()\l+ __vector()\l+ __vector()\l+ __vector()\l+ __vector()\l+ get_x()\l+ get_y()\l+ get_z()\l+ get_w()\l+ set_x()\l+ set_y()\l+ set_z()\l+ set_w()\l+ DECLARE_VECTOR_FOUR\l_COMPONENT_GET_SET()\l+ get_vector()\l+ set_vector()\l+ operator=()\l+ operator++()\l+ operator++()\l+ operator--()\l+ operator--()\l+ operator+()\l+ operator+=()\l+ operator-=()\l+ operator*=()\l+ operator/=()\l+ operator-()\l+ operator==()\l+ operator==()\l+ operator==()\l+ operator==()\l+ operator==()\l+ operator==()\l+ operator!=()\l}",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="midnightblue",fontsize="10",style="solid",arrowtail="onormal",fontname="Helvetica"];
+  Node2 [label="{hc::short_vector::\l__vector_data_container\l\< float, VECTOR_LENGTH \>\n||}",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classhc_1_1short__vector_1_1____vector__data__container.html"];
+  Node3 -> Node2 [dir="back",color="orange",fontsize="10",style="solid",label=" \< float, VECTOR_LENGTH \>" ,fontname="Helvetica"];
+  Node3 [label="{hc::short_vector::\l__vector_data_container\l\< SCALAR_TYPE, VECTOR_LENGTH \>\n||}",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classhc_1_1short__vector_1_1____vector__data__container.html"];
+}

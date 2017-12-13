@@ -1,0 +1,7 @@
+digraph "Graphical Class Hierarchy"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="hc::tiled_index\< N \>",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classhc_1_1tiled__index.html",tooltip="Represents a set of related indices subdivided into 1-, 2-, or 3-dimensional tiles. "];
+}

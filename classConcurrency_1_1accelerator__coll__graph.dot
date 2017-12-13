@@ -1,0 +1,6 @@
+digraph "Concurrency::accelerator"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="{Concurrency::accelerator\n|+ default_accelerator\l+ cpu_accelerator\l|+ accelerator()\l+ accelerator()\l+ accelerator()\l+ operator=()\l+ get_default_view()\l+ create_view()\l+ operator==()\l+ operator!=()\l+ set_default_cpu_access_type()\l+ get_device_path()\l+ get_description()\l+ get_version()\l+ get_has_display()\l+ get_dedicated_memory()\l+ get_supports_double\l_precision()\l+ get_supports_limited\l_double_precision()\l+ get_is_debug()\l+ get_is_emulated()\l+ get_supports_cpu_shared\l_memory()\l+ get_default_cpu_access_type()\l+ get_all()\l+ set_default()\l+ get_auto_selection_view()\l* default_accelerator\l* cpu_accelerator\l}",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+}

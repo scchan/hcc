@@ -1,0 +1,6 @@
+digraph "hc::array_view&lt; const T, N &gt;"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="{hc::array_view\< const\l T, N \>\n|+ rank\l|+ array_view()\l+ array_view()\l+ array_view()\l+ array_view()\l+ array_view()\l+ array_view()\l+ array_view()\l+ array_view()\l+ array_view()\l+ array_view()\l+ array_view()\l+ array_view()\l+ get_extent()\l+ get_source_accelerator_view()\l+ copy_to()\l+ copy_to()\l+ data()\l+ accelerator_pointer()\l+ refresh()\l+ synchronize()\l+ synchronize_async()\l+ synchronize_to()\l+ synchronize_to_async()\l+ get_ref()\l+ section()\l+ section()\l+ section()\l+ reinterpret_as()\l+ view_as()\l+ ~array_view()\l+ internal()\l+ get_offset()\l+ get_index_base()\l+ operator=()\l+ operator=()\l+ operator[]()\l+ operator()()\l+ operator()()\l+ operator()()\l+ operator()()\l+ operator[]()\l+ section()\l+ section()\l+ section()\l* operator=()\l* operator=()\l* operator[]()\l* operator()()\l* operator()()\l* operator()()\l* operator()()\l* operator[]()\l* section()\l* section()\l* section()\l}",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+}

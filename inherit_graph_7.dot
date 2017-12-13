@@ -1,0 +1,9 @@
+digraph "Graphical Class Hierarchy"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="__vector_data_container\l\< SCALAR_TYPE, VECTOR\l_LENGTH \>",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$class____vector__data__container.html"];
+  Node1 -> Node2 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node2 [label="__vector\< SCALAR_TYPE,\l VECTOR_LENGTH \>",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$class____vector.html"];
+}

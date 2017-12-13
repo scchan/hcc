@@ -1,0 +1,6 @@
+digraph "Concurrency::accelerator_view"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="{Concurrency::accelerator_view\n||+ accelerator_view()\l+ operator=()\l+ get_queuing_mode()\l+ get_is_auto_selection()\l+ get_version()\l+ get_accelerator()\l+ get_is_debug()\l+ wait()\l+ flush()\l+ create_marker()\l+ operator==()\l+ operator!=()\l}",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+}

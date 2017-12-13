@@ -1,0 +1,7 @@
+digraph "Graphical Class Hierarchy"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="Concurrency::array\l_view\< T, N \>",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classConcurrency_1_1array__view.html",tooltip="The array_view<T,N> type represents a possibly cached view into the data held in an array<T..."];
+}

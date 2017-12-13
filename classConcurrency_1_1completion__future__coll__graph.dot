@@ -1,0 +1,6 @@
+digraph "Concurrency::completion_future"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="{Concurrency::completion\l_future\n||+ completion_future()\l+ completion_future()\l+ completion_future()\l+ operator=()\l+ operator=()\l+ get()\l+ valid()\l+ operator std::shared\l_future\< void \>()\l+ then()\l+ ~completion_future()\l+ wait()\l+ wait_for()\l+ wait_until()\l* wait()\l* wait_for()\l* wait_until()\l}",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+}

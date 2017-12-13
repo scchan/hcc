@@ -1,0 +1,6 @@
+digraph "hc::accelerator_view"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="{hc::accelerator_view\n||+ accelerator_view()\l+ operator=()\l+ get_queuing_mode()\l+ get_execute_order()\l+ get_is_auto_selection()\l+ get_version()\l+ get_accelerator()\l+ get_is_debug()\l+ wait()\l+ flush()\l+ create_marker()\l+ create_blocking_marker()\l+ create_blocking_marker()\l+ create_blocking_marker()\l+ copy()\l+ copy_ext()\l+ copy_ext()\l+ copy_async()\l+ copy_async_ext()\l+ operator==()\l+ operator!=()\l+ get_max_tile_static_size()\l+ get_pending_async_ops()\l+ get_is_empty()\l+ get_hsa_queue()\l+ get_hsa_agent()\l+ get_hsa_am_region()\l+ get_hsa_am_system_region()\l+ get_hsa_am_finegrained\l_system_region()\l+ get_hsa_kernarg_region()\l+ is_hsa_accelerator()\l+ dispatch_hsa_kernel()\l+ set_cu_mask()\l}",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+}

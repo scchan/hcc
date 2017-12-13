@@ -1,0 +1,6 @@
+digraph "Concurrency::tile_barrier"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="{Concurrency::tile_barrier\n||+ tile_barrier()\l+ wait()\l+ wait_with_all_memory\l_fence()\l+ wait_with_global_memory\l_fence()\l+ wait_with_tile_static\l_memory_fence()\l}",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+}

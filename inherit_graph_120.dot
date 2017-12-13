@@ -1,0 +1,7 @@
+digraph "Graphical Class Hierarchy"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="hc::tile_barrier",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classhc_1_1tile__barrier.html",tooltip="The tile_barrier class is a capability class that is only creatable by the system, and passed to a tiled parallel_for_each function object as part of the tiled_index parameter. "];
+}

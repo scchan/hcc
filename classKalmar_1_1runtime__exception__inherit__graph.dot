@@ -1,0 +1,12 @@
+digraph "Kalmar::runtime_exception"
+{
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="{Kalmar::runtime_exception\n||+ runtime_exception()\l+ runtime_exception()\l+ runtime_exception()\l+ operator=()\l+ ~runtime_exception()\l+ what()\l+ get_error_code()\l}",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="midnightblue",fontsize="10",style="solid",arrowtail="onormal",fontname="Helvetica"];
+  Node2 [label="{std::exception\n||}",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled",tooltip="STL class. "];
+  Node1 -> Node3 [dir="back",color="midnightblue",fontsize="10",style="solid",arrowtail="onormal",fontname="Helvetica"];
+  Node3 [label="{Kalmar::accelerator\l_view_removed\n||+ accelerator_view_removed()\l+ accelerator_view_removed()\l+ get_view_removed_reason()\l}",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classKalmar_1_1accelerator__view__removed.html"];
+  Node1 -> Node4 [dir="back",color="midnightblue",fontsize="10",style="solid",arrowtail="onormal",fontname="Helvetica"];
+  Node4 [label="{Kalmar::invalid_compute\l_domain\n||+ invalid_compute_domain()\l+ invalid_compute_domain()\l}",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classKalmar_1_1invalid__compute__domain.html"];
+}
