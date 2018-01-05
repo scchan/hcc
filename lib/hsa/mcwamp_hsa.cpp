@@ -36,6 +36,8 @@
 #include <hsa/amd_hsa_kernel_code.h>
 #include <hsa/hsa_ven_amd_loader.h>
 
+#include "llvm/Support/AMDGPUMetadata.h"
+
 #include "kalmar_runtime.h"
 #include "kalmar_aligned_alloc.h"
 
@@ -452,6 +454,35 @@ namespace
     }
 
     inline
+    void retrieve_runtime_metadata_notes(
+      const ELFIO::elfio& reader,
+      ELFIO::section* note,
+      llvm::AMDGPU::HSAMD::Metadata& metadata) {
+
+      if (note == nullptr)
+        return;
+
+      ELFIO::note_section_accessor n(reader, note);
+      const ELFIO::Elf_Word num_entries = n.get_notes_num(); 
+      for (ELFIO::Elf_Word i = 0; i < num_entries; i++) {
+
+        ELFIO::Elf_Word type;
+        std::string name;
+        void* desc;
+        ELFIO::Elf_Word desc_size;
+        if (n.get_note(i, type, name, desc, desc_size)) {
+          // check for NT_AMD_AMDGPU_HSA_METADATA
+          if (type == 10 &&
+              name == std::string("AMD")) {
+            std::string metadata_str((const char*)desc, (size_t)desc_size);
+            llvm::AMDGPU::HSAMD::fromString(metadata_str, metadata);
+            break;
+          }
+        }
+      }
+    }
+
+    inline
     hsa_code_object_reader_t load_code_object_and_freeze_executable(
         void* elf,
         std::size_t byte_cnt,
@@ -559,14 +590,17 @@ class HSAExecutable {
 private:
     hsa_code_object_reader_t hsaCodeObjectReader;
     hsa_executable_t hsaExecutable;
+    llvm::AMDGPU::HSAMD::Metadata metadata;
     friend class HSAKernel;
     friend class Kalmar::HSADevice;
 
 public:
     HSAExecutable(hsa_executable_t _hsaExecutable,
-                  hsa_code_object_reader_t _hsaCodeObjectReader) :
+                  hsa_code_object_reader_t _hsaCodeObjectReader,
+                  llvm::AMDGPU::HSAMD::Metadata _metadata) :
         hsaExecutable(_hsaExecutable),
-        hsaCodeObjectReader(_hsaCodeObjectReader) {}
+        hsaCodeObjectReader(_hsaCodeObjectReader),
+        metadata(_metadata) {}
 
     ~HSAExecutable() {
       hsa_status_t status;
@@ -601,6 +635,16 @@ public:
         T* symbol_ptr = (T*)symbol_address;
         *symbol_ptr = value;
     }
+
+
+    const llvm::AMDGPU::HSAMD::Kernel::Metadata*
+    getKernelMetadata(std::string& kernelName) {
+      for (const auto& k_metadata : metadata.mKernels) {
+        if (k_metadata.mName == kernelName)
+          return &k_metadata;
+      }
+      return nullptr;
+    }
 };
 
 class HSAKernel {
@@ -613,6 +657,13 @@ private:
     uint32_t static_group_segment_size;
     uint32_t private_segment_size;
     uint16_t workitem_vgpr_count;
+
+    std::vector<uint32_t> required_workgroup_size;
+    uint64_t kernarg_segment_size;
+    uint16_t num_sgpr;
+    uint16_t num_vgpr;
+    uint32_t max_flat_workgroup_size;
+
     friend class HSADispatch;
 
 public:
@@ -655,6 +706,28 @@ public:
             STATUS_CHECK(status, __LINE__);
 
             workitem_vgpr_count = akc->workitem_vgpr_count;
+        }
+
+        const llvm::AMDGPU::HSAMD::Kernel::Metadata* metadata = 
+          executable->getKernelMetadata(kernelName);
+        if (metadata != nullptr) {
+          if (!metadata->mAttrs.mReqdWorkGroupSize.empty()) {
+            required_workgroup_size = metadata->mAttrs.mReqdWorkGroupSize;
+          }
+          kernarg_segment_size = metadata->mCodeProps.mKernargSegmentSize;
+          num_sgpr = metadata->mCodeProps.mNumSGPRs;
+          num_vgpr = metadata->mCodeProps.mNumVGPRs;
+          max_flat_workgroup_size = metadata->mCodeProps.mMaxFlatWorkGroupSize;
+
+
+          std::cout << "kernarg_segment_size: " << kernarg_segment_size << std::endl;
+          std::cout << "num_sgpr: " << num_sgpr << std::endl;
+          std::cout << "max_flat_workgroup_size: " << max_flat_workgroup_size << std::endl;
+        }
+        else {
+          std::stringstream msg;
+          msg << "Metadata missing for kernel " << _kernelName << ".";
+          throw Kalmar::runtime_exception(msg.str().c_str(), -1);
         }
 
         DBOUTL(DB_CODE, "Create kernel " << shortKernelName << " vpr_cnt=" << this->workitem_vgpr_count
@@ -3222,6 +3295,14 @@ private:
                 agent,
                 hsaExecutable);
 
+            const auto note = 
+                find_section_if(reader, [](const ELFIO::section* x) {
+                    return x->get_type() == SHT_NOTE;
+            });
+
+            llvm::AMDGPU::HSAMD::Metadata metadata;
+            retrieve_runtime_metadata_notes(reader, note, metadata);
+
             auto code_object_reader = load_code_object_and_freeze_executable(
                 kernelBuffer, kernelSize, agent, hsaExecutable);
 
@@ -3231,7 +3312,7 @@ private:
 
             // save everything as an HSAExecutable instance
             executables[index] = new HSAExecutable(
-                hsaExecutable, code_object_reader);
+                hsaExecutable, code_object_reader, metadata);
         }
     }
 
@@ -4591,8 +4672,21 @@ HSADispatch::setLaunchConfiguration(const int dims, size_t *globalDims, size_t *
 
     int workgroup_size[3] = { 1, 1, 1};
 
-    // Check whether the user specified a workgroup size
-    if (localDims[0] != 0) {
+    
+
+    if (!kernel->required_workgroup_size.empty()) {
+      for (int i = 0; i < 3; ++i) {
+        if (localDims[i] != kernel->required_workgroup_size[i]) {
+          std::stringstream msg;
+          msg << "The extent of the tile must be ("
+              <<  kernel->required_workgroup_size[0] << ","
+              <<  kernel->required_workgroup_size[1] << ","
+              <<  kernel->required_workgroup_size[2] << ")." ;
+          throw Kalmar::runtime_exception(msg.str().c_str(), -1);
+        }
+      }
+    }
+    else if (localDims[0] != 0) {
       for (int i = 0; i < dims; i++) {
         // If user specify a group size that exceeds the device limit
         // throw an error
@@ -4666,8 +4760,6 @@ HSADispatch::setLaunchConfiguration(const int dims, size_t *globalDims, size_t *
         }
       }
     }
-
-    auto kernel = this->kernel;
 
     auto calculate_kernel_max_flat_workgroup_size = [&] {
       constexpr unsigned int max_num_vgprs_per_work_item = 256;

@@ -83,6 +83,10 @@ macro(add_mcwamp_library_hsa name )
   target_link_libraries(${name} PRIVATE unwind)
   add_libcxx_option_if_needed(${name})
   target_link_libraries(${name} PUBLIC hc_am)
+
+  add_dependencies(${name} LLVMSupport)
+  target_include_directories(${name} PRIVATE ${LLVM_SRC}/include)
+  target_link_libraries(${name} PRIVATE ${PROJECT_BINARY_DIR}/compiler/lib/libLLVMSupport.a)
 endmacro(add_mcwamp_library_hsa name )
 
 macro(add_mcwamp_library_hc_am name )
