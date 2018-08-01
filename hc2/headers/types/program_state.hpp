@@ -10,7 +10,7 @@
 #include "../functions/integer_computational_basis.hpp"
 #include "../functions/hsa_interfaces.hpp"
 #include "../types/code_object_bundle.hpp"
-
+#include "../types/code_object_manager.hpp"
 #include <hc.hpp>
 
 #include <hsa/hsa.h>
