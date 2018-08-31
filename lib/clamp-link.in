@@ -198,7 +198,7 @@ _thinlto_path() {
 _default_path() {
 
   # combine kernel sections together
-  $LINK "${LINK_KERNEL_ARGS[@]}" | $OPT -always-inline - -o $TEMP_DIR/kernel.bc
+  $LINK "${LINK_KERNEL_ARGS[@]}" -o $TEMP_DIR/kernel.bc
 
   if [ $VERBOSE == 1 ]; then
     echo "Generating AMD GCN kernel"

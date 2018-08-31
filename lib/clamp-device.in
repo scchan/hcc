@@ -172,29 +172,12 @@ if [ $KMDUMPLLVM == "1" ]; then
   cp $2.linked.bc ${KMDUMPDIR}/dump.linked.bc
 fi
 
-# Invoke HCC-specific opt passes
-if [ "$HCC_TILECHECK" == "ON" ]; then
-    $OPT -load $LIB/LLVMSelectAcceleratorCode@CMAKE_SHARED_LIBRARY_SUFFIX@ \
-        -select-accelerator-code -dce -globaldce -always-inline -tile_uniform < $2.linked.bc -o $2.selected.bc
-else
-    $OPT -load $LIB/LLVMSelectAcceleratorCode@CMAKE_SHARED_LIBRARY_SUFFIX@ \
-        -select-accelerator-code -dce -globaldce -always-inline < $2.linked.bc -o $2.selected.bc
-fi
-
-# error handling for HCC-specific opt passes
-RETVAL=$?
-if [ $RETVAL != 0 ]; then
-  echo "Generating AMD GCN kernel failed in HCC-specific opt passes for target: $AMDGPU_TARGET"
-  exit $RETVAL
-fi
-
-if [ $KMDUMPLLVM == "1" ]; then
-  cp $2.selected.bc ${KMDUMPDIR}/dump.selected.bc
-fi
-
-# Optimization notes:
-#  -disable-simplify-libcalls:  prevents transforming loops into library calls such as memset, memcopy on GPU
-$OPT -mtriple amdgcn--amdhsa-amdgiz -mcpu=$AMDGPU_TARGET -infer-address-spaces -amdgpu-internalize-symbols -disable-simplify-libcalls $KMOPTOPT -verify $2.selected.bc -o $2.opt.bc
+$OPT \
+   -mtriple amdgcn--amdhsa-amdgiz -mcpu=$AMDGPU_TARGET \
+   -load $LIB/LLVMSelectAcceleratorCode@CMAKE_SHARED_LIBRARY_SUFFIX@ \
+   -select-accelerator-code -dce -globaldce -always-inline \
+   -infer-address-spaces -amdgpu-internalize-symbols -disable-simplify-libcalls $KMOPTOPT -verify \
+   < $2.linked.bc -o $2.opt.bc
 
 # error handling for opt
 RETVAL=$?
