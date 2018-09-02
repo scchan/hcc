@@ -37,9 +37,22 @@ KMHACKLLVM="${KMHACKLLVM:=0}"
 # enable ThinLTO
 KMTHINLTO="${KMTHINLTO:=0}"
 
-if [ $KMDBSCRIPT == "1" ]
+# enable LLVM time passes
+KMTIMEPASSES="${KMTIMEPASSES:=0}"
+
+# time compiler commands
+KMTIMECOMMAND="${KMTIMECOMMAND:=0}"
+
+TIME_PASSES=""
+if [ $KMTIMEPASSES == "1" ]
 then
-  set -x
+  TIME_PASSES="-time-passes"
+fi
+
+TIME_COMMAND=""
+if [ $KMTIMECOMMAND == "1" ]
+then
+  TIME_COMMAND="time"
 fi
 
 # check command line arguments
@@ -159,7 +172,7 @@ HCC_BC_LIBS="$ROCM_LIB/hc.amdgcn.bc $ROCM_LIB/opencl.amdgcn.bc $ROCM_LIB/ocml.am
 # include libraries specified through the HCC_EXTRA_LIBRARIES environment variable
 HCC_BC_LIBS="$HCC_BC_LIBS  $HCC_EXTRA_LIBRARIES $HCC_EXTRA_ARCH_FILE"
 
-$LINK -suppress-warnings -o $2.linked.bc $1 $HCC_BC_LIBS
+$TIME_COMMAND $LINK -suppress-warnings -o $2.linked.bc $1 $HCC_BC_LIBS
 
 # error handling for llvm-link
 RETVAL=$?
@@ -172,7 +185,7 @@ if [ $KMDUMPLLVM == "1" ]; then
   cp $2.linked.bc ${KMDUMPDIR}/dump.linked.bc
 fi
 
-$OPT \
+$TIME_COMMAND $OPT $TIME_PASSES \
    -mtriple amdgcn--amdhsa-amdgiz -mcpu=$AMDGPU_TARGET \
    -load $LIB/LLVMSelectAcceleratorCode@CMAKE_SHARED_LIBRARY_SUFFIX@ \
    -select-accelerator-code -dce -globaldce -always-inline \
@@ -200,9 +213,9 @@ if [ $KMDUMPLLVM == "1" ]; then
 fi
 
 if [ $KMTHINLTO == "1" ]; then
-  $LLC $KMOPTLLC -mtriple amdgcn--amdhsa-amdgiz -mcpu=$AMDGPU_TARGET -filetype=obj -enable-si-insert-waitcnts=0 -o $2 $2.opt.bc
+  $TIME_COMMAND $LLC $TIME_PASSES $KMOPTLLC -mtriple amdgcn--amdhsa-amdgiz -mcpu=$AMDGPU_TARGET -filetype=obj -enable-si-insert-waitcnts=0 -o $2 $2.opt.bc
 else
-  $LLC $KMOPTLLC -mtriple amdgcn--amdhsa-amdgiz -mcpu=$AMDGPU_TARGET -filetype=obj -enable-si-insert-waitcnts=0 -o $2.isabin $2.opt.bc
+  $TIME_COMMAND $LLC $TIME_PASSES $KMOPTLLC -mtriple amdgcn--amdhsa-amdgiz -mcpu=$AMDGPU_TARGET -filetype=obj -enable-si-insert-waitcnts=0 -o $2.isabin $2.opt.bc
 fi
 
 # error handling for llc
@@ -218,7 +231,7 @@ if [ $KMDUMPISA == "1" ]; then
   else
     cp $2.isabin ./dump-$AMDGPU_TARGET.isabin
   fi
-  $OBJDUMP -disassemble -t -all-headers -line-numbers -mcpu=$AMDGPU_TARGET ./dump-$AMDGPU_TARGET.isabin  >${KMDUMPDIR}/dump-$AMDGPU_TARGET.isa
+  $TIME_COMMAND $OBJDUMP -disassemble -t -all-headers -line-numbers -mcpu=$AMDGPU_TARGET ./dump-$AMDGPU_TARGET.isabin  >${KMDUMPDIR}/dump-$AMDGPU_TARGET.isa
 fi
 
 # ThinLTO does not performs LLD here inside clamp-device.in.
