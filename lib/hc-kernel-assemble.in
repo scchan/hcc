@@ -9,6 +9,7 @@ KMDBSCRIPT="${KMDBSCRIPT:=0}"
 KMDUMPLLVM="${KMDUMPLLVM:=0}"
 
 AMDGPU_OBJ_CODEGEN="${AMDGPU_OBJ_CODEGEN:=0}"
+AMDGPU_EXTRA_ARCH="${AMDGPU_EXTRA_ARCH:=0}"
 
 if [ $KMDBSCRIPT == "1" ]
 then
@@ -65,6 +66,11 @@ if [ "$#" -lt 2 ]; then
 fi
 
 AMDGPU_TARGET_ARRAY=()
+if [ $AMDGPU_EXTRA_ARCH != "0" ]
+then
+  AMDGPU_TARGET_ARRAY+=("$AMDGPU_EXTRA_ARCH")
+fi
+
 for ARG in "$@"
 do
   case $ARG in
