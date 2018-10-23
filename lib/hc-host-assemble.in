@@ -8,6 +8,9 @@ KMDBSCRIPT="${KMDBSCRIPT:=0}"
 # dump the LLVM bitcode
 KMDUMPLLVM="${KMDUMPLLVM:=0}"
 
+# force -mcmodel
+HCC_HOST_CODE_MODEL="${HCC_HOST_CODE_MODEL:=0}"
+
 if [ $KMDBSCRIPT == "1" ]
 then
   set -x
@@ -30,7 +33,21 @@ if [ ! -f "$1" ]; then
   exit 1
 fi
 
+if [ $KMDUMPLLVM == "1" ]; then
+  cp $1 ./dump.host-assemble.bc
+fi
+
 CXXFLAGS=
+
+# env var to add code model option
+if [ $HCC_HOST_CODE_MODEL == "1" ]; then
+  CXXFLAGS="$CXXFLAGS -mcmodel=small "
+elif [ $HCC_HOST_CODE_MODEL == "2" ]; then
+  CXXFLAGS="$CXXFLAGS -mcmodel=medium "
+elif [ $HCC_HOST_CODE_MODEL == "3" ]; then
+  CXXFLAGS="$CXXFLAGS -mcmodel=large "
+fi
+
 # Pass down compiler options
 if [ "$#" -ge 2 ]; then
   num=2

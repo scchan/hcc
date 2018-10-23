@@ -9,7 +9,7 @@ KMDBSCRIPT="${KMDBSCRIPT:=0}"
 KMDUMPLLVM="${KMDUMPLLVM:=0}"
 
 AMDGPU_OBJ_CODEGEN="${AMDGPU_OBJ_CODEGEN:=0}"
-AMDGPU_EXTRA_ARCH="${AMDGPU_EXTRA_ARCH:=0}"
+HCC_EXTRA_GPU_ARCH="${HCC_EXTRA_GPU_ARCH:=0}"
 
 if [ $KMDBSCRIPT == "1" ]
 then
@@ -34,7 +34,7 @@ CLANG_OFFLOAD_BUNDLER=$BINDIR/clang-offload-bundler
 # always be found either in build directory or installed directory.
 CXXFLAGS="-std=c++amp -I$BINDIR/../include -I$BINDIR/../../include -fPIC"
 
-# Add additional flags if using libc++ for C++ runtime
+
 USE_LIBCXX=@USE_LIBCXX@
 if [ "$USE_LIBCXX" == "ON" ]; then
  CXXFLAGS+=" -stdlib=libc++ -I@LIBCXX_HEADER@" 
@@ -66,9 +66,9 @@ if [ "$#" -lt 2 ]; then
 fi
 
 AMDGPU_TARGET_ARRAY=()
-if [ $AMDGPU_EXTRA_ARCH != "0" ]
+if [ $HCC_EXTRA_GPU_ARCH != "0" ]
 then
-  AMDGPU_TARGET_ARRAY+=("$AMDGPU_EXTRA_ARCH")
+  AMDGPU_TARGET_ARRAY+=("$HCC_EXTRA_GPU_ARCH")
 fi
 
 for ARG in "$@"
