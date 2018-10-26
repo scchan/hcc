@@ -123,6 +123,13 @@ namespace hc2
 
         std::vector<hc::accelerator> acc_;
 
+        template <typename P>
+        static
+        inline ELFIO::section* find_section_if(ELFIO::elfio& reader, P p) {
+            const auto it = std::find_if(reader.sections.begin(), reader.sections.end(), std::move(p));
+            return it != reader.sections.end() ? *it : nullptr;
+        }
+
         template<typename T = std::vector<std::vector<char>>>
         static
         int copy_kernel_sections_(dl_phdr_info* x, size_t, void* kernels)
@@ -148,10 +155,22 @@ namespace hc2
         const std::vector<Bundled_code_header>& shared_object_kernel_sections_()
         {
             static std::vector<Bundled_code_header> r;
-
             static std::once_flag f;
             std::call_once(f, []() {
                 std::vector<std::vector<char>> ks;
+
+                static constexpr const char self[] = "/proc/self/exe";
+                static constexpr const char kernel_section[] = ".kernel";
+                ELFIO::elfio reader;
+                if (!reader.load(self)) {
+                    throw std::runtime_error{"Failed to load ELF file for current process."};
+                }
+                auto kernels =
+                        find_section_if(reader, [](const ELFIO::section* x) { return x->get_name() == kernel_section; });
+                if (kernels) { 
+                    ks.emplace_back(kernels->get_data(), kernels->get_data() + kernels->get_size());
+                }
+
                 dl_iterate_phdr(copy_kernel_sections_<>, &ks);
                 for (auto&& x : ks) {
                     size_t offset = 0;

@@ -26,9 +26,6 @@ const wchar_t accelerator::default_accelerator[] = L"default";
 
 } // namespace Concurrency
 
-// Kernel bundle
-extern "C" char * kernel_bundle_source[] asm ("_binary_kernel_bundle_start") __attribute__((visibility("default")));
-
 // interface of HCC runtime implementation
 struct RuntimeImpl {
   RuntimeImpl(const char* libraryName) :
@@ -83,20 +80,13 @@ namespace CLAMP {
 class PlatformDetect {
 public:
   PlatformDetect(const std::string& name,
-                 const std::string& ampRuntimeLibrary,
-                 void* const kernel_source)
+                 const std::string& ampRuntimeLibrary)
     : m_name(name),
-      m_ampRuntimeLibrary(ampRuntimeLibrary),
-      m_kernel_source(kernel_source) {}
+      m_ampRuntimeLibrary(ampRuntimeLibrary) {}
 
   virtual bool detect() {
     //std::cout << "Detecting " << m_name << "...";
     // detect if kernel is available
-    if (!m_kernel_source) {
-      //std::cout << " kernel not found" << std::endl;
-      return false;
-    }
-    //std::cout << " kernel found...";
 
     void* handle = nullptr;
 
@@ -119,7 +109,6 @@ public:
 private:
   std::string m_ampRuntimeLibrary;
   std::string m_name;
-  void* m_kernel_source;
 };
 
 /**
@@ -127,7 +116,7 @@ private:
  */
 class HSAPlatformDetect : public PlatformDetect {
 public:
-  HSAPlatformDetect() : PlatformDetect("HSA", "libmcwamp_hsa.so",  kernel_bundle_source) {}
+  HSAPlatformDetect() : PlatformDetect("HSA", "libmcwamp_hsa.so") {}
 };
 
 
@@ -260,92 +249,6 @@ static inline uint64_t Read8byteIntegerFromBuffer(const char *data, size_t pos) 
   exit(val); \
 }
 
-struct _code_bundle {
-  uint64_t offset;
-  uint64_t size;
-  uint64_t triple_size;
-  const char* triple;
-  const char* device_binary;
-};
-
-static void read_code_bundles(std::vector<_code_bundle>& bundles) {
-
-  const char* bundles_data_start = (const char *)kernel_bundle_source;
-
-  while (1) {
-
-    constexpr char OFFLOAD_BUNDLER_MAGIC_STR[] = "__CLANG_OFFLOAD_BUNDLE__";
-    constexpr size_t OFFLOAD_BUNDLER_MAGIC_STR_LENGTH = sizeof(OFFLOAD_BUNDLER_MAGIC_STR)-1;
-    auto detect_bundle_magic = [&](const char* b) {
-      for (int i = 0; i < OFFLOAD_BUNDLER_MAGIC_STR_LENGTH; ++i) {
-        if (b[i] != OFFLOAD_BUNDLER_MAGIC_STR[i])
-          return false;
-      }
-      return true;
-    };
-
-    if (detect_bundle_magic(bundles_data_start)) {
-
-      auto read_uint64 = [](const char* p) {
-        return *reinterpret_cast<const uint64_t*>(p);
-      };
-
-      // skip the magic string
-      const char* bundles_data_ptr = bundles_data_start + OFFLOAD_BUNDLER_MAGIC_STR_LENGTH;
-
-      // get number of bundles
-      uint64_t num_bundles = read_uint64(bundles_data_ptr);
-      bundles_data_ptr+=8;
-
-      size_t bundle_end = 0;
-      for (uint64_t i = 0; i < num_bundles; ++i) {
-
-        _code_bundle b = {0};
-        b.offset = read_uint64(bundles_data_ptr);
-        bundles_data_ptr+=8;
-        b.size = read_uint64(bundles_data_ptr);
-        bundles_data_ptr+=8;
-        b.triple_size = read_uint64(bundles_data_ptr);
-        bundles_data_ptr+=8;
-        b.triple = bundles_data_ptr;
-        bundles_data_ptr+=b.triple_size;
-        b.device_binary = bundles_data_start + b.offset;
-        bundle_end = std::max(bundle_end, b.offset + b.size);
-
-        auto detect_hcc_code = [](_code_bundle& b) {
-          constexpr char HCC_TRIPLE_PREFIX[] = "hcc-amdgcn-amd-amdhsa--";
-          constexpr size_t HCC_TRIPLE_PREFIX_LENGTH = sizeof(HCC_TRIPLE_PREFIX)-1;
-          return (b.triple_size >= HCC_TRIPLE_PREFIX_LENGTH
-                  && std::memcmp(b.triple, HCC_TRIPLE_PREFIX,
-                                   HCC_TRIPLE_PREFIX_LENGTH) == 0);
-        };
-        if (detect_hcc_code(b)) bundles.push_back(std::move(b));
-      }
-
-      // bump to read the next group of bundles
-      bundles_data_start += bundle_end;
-    }
-    else {
-      // no more device code objects, exit
-      break;
-    }
-  }
-}
-
-
-void LoadInMemoryProgram(KalmarQueue* pQueue) {
-
-  static std::vector<_code_bundle> bundles;
-  static std::once_flag f;
-  std::call_once(f, [&](){ read_code_bundles(bundles); });
-
-  for (auto&& b : bundles) {
-    if (pQueue->getDev()->IsCompatibleKernel((void*) b.size, (void*) b.device_binary)) {
-      pQueue->getDev()->BuildProgram((void*) b.size, (void*) b.device_binary);
-    }
-  }
-}
-
 // used in parallel_for_each.h
 void *CreateKernel(std::string s, KalmarQueue* pQueue) {
   // TODO - should create a HSAQueue:: CreateKernel member function that creates and returns a dispatch.
@@ -392,12 +295,8 @@ public:
 
       // load kernels on the default queue for each device
       for (auto dev = devices.begin(); dev != devices.end(); dev++) {
-
         // get default queue on the device
         std::shared_ptr<KalmarQueue> queue = (*dev)->get_default_queue();
-
-        // load kernels on the default queue for the device
-        CLAMP::LoadInMemoryProgram(queue.get());
       }
     }
   }

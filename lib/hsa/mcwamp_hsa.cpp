@@ -547,10 +547,6 @@ extern "C" void PushArgPtrImpl(void *ker, int idx, size_t sz, const void *v);
 namespace Kalmar {
 class HSAQueue;
 class HSADevice;
-
-namespace CLAMP {
-  void LoadInMemoryProgram(KalmarQueue*);
-} // namespace CLAMP
 } // namespace Kalmar
 
 ///
@@ -2677,12 +2673,6 @@ public:
     }
 
     void* CreateKernel(const char* fun, Kalmar::KalmarQueue *queue) override {
-        // try load kernels lazily in case it was not done so at bootstrap
-        // due to HCC_LAZYINIT env var
-        if (executables.size() == 0) {
-          CLAMP::LoadInMemoryProgram(queue);
-        }
-
         std::string str(fun);
         HSAKernel *kernel = programs[str];
 
