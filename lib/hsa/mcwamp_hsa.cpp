@@ -2780,8 +2780,8 @@ public:
 
             if (!kernel) {
                 const auto it =
-                    shared_object_kernels(hc2::program_state()).find(agent);
-                if (it != shared_object_kernels(hc2::program_state()).cend()) {
+                    kernels(hc2::program_state()).find(agent);
+                if (it != kernels(hc2::program_state()).cend()) {
                     const auto k = std::find_if(
                         it->second.cbegin(),
                         it->second.cend(),
@@ -3084,9 +3084,33 @@ public:
     }
 
     void* getSymbolAddress(const char* symbolName) override {
-        hsa_status_t status;
 
-        unsigned long* symbol_ptr = nullptr;
+        // make sure the kernels are loaded
+        static std::once_flag f;
+        std::call_once(f, []() {
+            kernels(hc2::program_state());
+        });
+
+        hsa_status_t status;
+        void* symbol_ptr = nullptr;
+        auto executables_for_agent = executable_table(hc2::program_state()).find(agent);
+        if (executables_for_agent == executable_table(hc2::program_state()).end()) {
+            for (const auto& ex : executables_for_agent->second) {
+                // get symbol
+                hsa_executable_symbol_t symbol;
+                status = hsa_executable_get_symbol_by_name(handle(ex), symbolName, const_cast<hsa_agent_t*>(&agent), &symbol);
+                if (status == HSA_STATUS_SUCCESS) {
+                    // get address of symbol
+                    status = hsa_executable_symbol_get_info(symbol,
+                                                            HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS,
+                                                            &symbol_ptr);
+                    STATUS_CHECK(status, __LINE__);
+                    break;
+                }
+            }
+        }
+
+#if 0
         if (executables.size() != 0) {
             // iterate through all HSA executables
             for (auto executable_iterator : executables) {
@@ -3112,6 +3136,7 @@ public:
         } else {
             throw Kalmar::runtime_exception("HSA executable NOT built yet!", 0);
         }
+#endif
 
         return symbol_ptr;
     }
@@ -3123,7 +3148,8 @@ public:
     void memcpySymbol(void* symbolAddr, void* hostptr, size_t count, size_t offset = 0, enum hcCommandKind kind = hcMemcpyHostToDevice) override {
         hsa_status_t status;
 
-        if (executables.size() != 0) {
+        //if (executables.size() != 0) {
+
             // copy data
             if (kind == hcMemcpyHostToDevice) {
                 // host -> device
@@ -3134,19 +3160,28 @@ public:
                 status = hsa_memory_copy(hostptr, (char*)symbolAddr + offset, count);
                 STATUS_CHECK(status, __LINE__);
             }
+
+#if 0
         } else {
             throw Kalmar::runtime_exception("HSA executable NOT built yet!", 0);
         }
+#endif
     }
 
     // FIXME: return values
     void memcpySymbol(const char* symbolName, void* hostptr, size_t count, size_t offset = 0, enum hcCommandKind kind = hcMemcpyHostToDevice) override {
-        if (executables.size() != 0) {
+        //if (executables.size() != 0) {
+
             unsigned long* symbol_ptr = (unsigned long*)getSymbolAddress(symbolName);
             memcpySymbol(symbol_ptr, hostptr, count, offset, kind);
+
+
+
+#if 0
         } else {
             throw Kalmar::runtime_exception("HSA executable NOT built yet!", 0);
         }
+#endif
     }
 
     void* getHSAAgent() override;

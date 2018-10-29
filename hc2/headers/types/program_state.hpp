@@ -14,6 +14,7 @@
 #include <hc.hpp>
 
 #include <hsa/hsa.h>
+#include <hsa/hsa_ext_amd.h>
 
 #include "../../external/elfio/elfio.hpp"
 
@@ -23,6 +24,7 @@
 #include <iterator>
 #include <mutex>
 #include <ostream>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 
@@ -61,6 +63,194 @@ namespace hc2
             return make_code_object_reader(x.data(), x.size());
         }
 
+struct Symbol {
+    std::string name;
+    ELFIO::Elf64_Addr value = 0;
+    ELFIO::Elf_Xword size = 0;
+    ELFIO::Elf_Half sect_idx = 0;
+    uint8_t bind = 0;
+    uint8_t type = 0;
+    uint8_t other = 0;
+};
+
+inline Symbol read_symbol(const ELFIO::symbol_section_accessor& section, unsigned int idx) {
+    assert(idx < section.get_symbols_num());
+
+    Symbol r;
+    section.get_symbol(idx, r.name, r.value, r.size, r.bind, r.type, r.sect_idx, r.other);
+
+    return r;
+}
+        template <typename P>
+        static
+        inline ELFIO::section* find_section_if(ELFIO::elfio& reader, P p) {
+            const auto it = std::find_if(reader.sections.begin(), reader.sections.end(), std::move(p));
+            return it != reader.sections.end() ? *it : nullptr;
+        }
+
+inline
+const std::unordered_map<std::string, std::pair<ELFIO::Elf64_Addr, ELFIO::Elf_Xword>>&
+symbol_addresses() {
+    static std::unordered_map<std::string, std::pair<ELFIO::Elf64_Addr, ELFIO::Elf_Xword>> r;
+    static std::once_flag f;
+
+    std::call_once(f, []() {
+        dl_iterate_phdr(
+            [](dl_phdr_info* info, size_t, void*) {
+                static constexpr const char self[] = "/proc/self/exe";
+                ELFIO::elfio reader;
+
+                static unsigned int iter = 0u;
+                if (reader.load(!iter ? self : info->dlpi_name)) {
+                    auto it = find_section_if(
+                        reader, [](const class ELFIO::section* x) { return x->get_type() == SHT_SYMTAB; });
+
+                    if (it) {
+                        const ELFIO::symbol_section_accessor symtab{reader, it};
+
+                        for (auto i = 0u; i != symtab.get_symbols_num(); ++i) {
+                            auto tmp = read_symbol(symtab, i);
+
+                            if (tmp.type == STT_OBJECT && tmp.sect_idx != SHN_UNDEF) {
+                                const auto addr = tmp.value + (iter ? info->dlpi_addr : 0);
+                                r.emplace(std::move(tmp.name), std::make_pair(addr, tmp.size));
+                            }
+                        }
+                    }
+
+                    ++iter;
+                }
+
+                return 0;
+            },
+            nullptr);
+    });
+
+    return r;
+}
+
+inline
+std::unordered_map<std::string, void*>& globals() {
+    static std::unordered_map<std::string, void*> r;
+    static std::once_flag f;
+    std::call_once(f, []() { r.reserve(symbol_addresses().size()); });
+
+    return r;
+}
+
+inline
+std::vector<std::string> copy_names_of_undefined_symbols(const ELFIO::symbol_section_accessor& section) {
+    std::vector<std::string> r;
+
+    for (auto i = 0u; i != section.get_symbols_num(); ++i) {
+        // TODO: this is boyscout code, caching the temporaries
+        //       may be of worth.
+
+        auto tmp = read_symbol(section, i);
+        if (tmp.sect_idx == SHN_UNDEF && !tmp.name.empty()) {
+            r.push_back(std::move(tmp.name));
+        }
+    }
+
+    return r;
+}
+
+inline
+void associate_code_object_symbols_with_host_allocation(const ELFIO::elfio& reader,
+                                                        ELFIO::section* code_object_dynsym,
+                                                        hsa_agent_t agent,
+                                                        hsa_executable_t& executable) {
+    if (!code_object_dynsym) return;
+
+    const auto undefined_symbols =
+        copy_names_of_undefined_symbols(ELFIO::symbol_section_accessor{reader, code_object_dynsym});
+
+    for (auto&& x : undefined_symbols) {
+        if (globals().find(x) != globals().cend()) return;
+
+        const auto it1 = symbol_addresses().find(x);
+
+        if (it1 == symbol_addresses().cend()) {
+            throw std::runtime_error{"Global symbol: " + x + " is undefined."};
+        }
+
+        static std::mutex mtx;
+        std::lock_guard<std::mutex> lck{mtx};
+
+        if (globals().find(x) != globals().cend()) return;
+        globals().emplace(x, (void*)(it1->second.first));
+        void* p = nullptr;
+        hsa_amd_memory_lock(reinterpret_cast<void*>(it1->second.first), it1->second.second,
+                            nullptr,  // All agents.
+                            0, &p);
+
+        hsa_executable_agent_global_variable_define(executable, agent, x.c_str(), p);
+    }
+}
+
+void load_code_object_and_freeze_executable(
+    const std::string& file, hsa_agent_t agent,
+    hsa_executable_t
+        executable) {  // TODO: the following sequence is inefficient, should be refactored
+    //       into a single load of the file and subsequent ELFIO
+    //       processing.
+    static const auto cor_deleter = [](hsa_code_object_reader_t* p) {
+        if (p) {
+            hsa_code_object_reader_destroy(*p);
+            delete p;
+        }
+    };
+
+    using RAII_code_reader = std::unique_ptr<hsa_code_object_reader_t, decltype(cor_deleter)>;
+
+    if (!file.empty()) {
+        RAII_code_reader tmp{new hsa_code_object_reader_t, cor_deleter};
+        hsa_code_object_reader_create_from_memory(file.data(), file.size(), tmp.get());
+
+        hsa_executable_load_agent_code_object(executable, agent, *tmp, nullptr, nullptr);
+
+        hsa_executable_freeze(executable, nullptr);
+
+        static std::vector<RAII_code_reader> code_readers;
+        static std::mutex mtx;
+
+        std::lock_guard<std::mutex> lck{mtx};
+        code_readers.push_back(move(tmp));
+    }
+}
+
+
+
+
+
+        inline
+        RAII_executable executable(
+            const std::vector<char>& blob, hsa_agent_t agent)
+        {
+            RAII_executable r{{}, hsa_executable_destroy};
+
+            std::string blob_to_str{blob.cbegin(), blob.cend()};
+            std::stringstream blob_is{blob_to_str};
+            ELFIO::elfio reader;
+
+            if (!reader.load(blob_is)) return r;
+ 
+            const auto code_object_dynsym = find_section_if(
+                reader, [](const ELFIO::section* x) { return x->get_type() == SHT_DYNSYM; });
+
+            hsa_executable_create_alt(
+                HSA_PROFILE_FULL,
+                HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, nullptr,
+                &handle(r));
+
+            associate_code_object_symbols_with_host_allocation(reader, code_object_dynsym, agent,
+                                                               handle(r));
+
+            load_code_object_and_freeze_executable(blob_to_str, agent, handle(r));
+            return r;
+        }
+
+#if 0
         inline
         RAII_executable executable(
             const RAII_code_object_reader& x, hsa_agent_t a)
@@ -102,11 +292,17 @@ namespace hc2
 
             return r;
         }
+#endif
     }
 
     class Program_state {
+/*
         using Code_object_table = std::unordered_map<
             hsa_isa_t, std::vector<RAII_code_object_reader>>;
+*/
+        using Code_object_table = std::unordered_map<
+            hsa_isa_t, std::vector<std::vector<char>>>;
+
         using Executable_table = std::unordered_map<
             hsa_agent_t, std::vector<RAII_executable>>;
         using Kernel_table = std::unordered_map<
@@ -116,19 +312,28 @@ namespace hc2
 
         friend
         inline
-        const Kernel_table& shared_object_kernels(const Program_state& x)
+        const Kernel_table& kernels(const Program_state& x)
         {
-            return x.shared_object_kernel_table_();
+            return x.kernel_table_();
+        }
+
+        friend
+        inline
+        const Executable_table& executable_table(const Program_state& x)
+        {
+            return x.executable_table_();  
         }
 
         std::vector<hc::accelerator> acc_;
 
+#if 0
         template <typename P>
         static
         inline ELFIO::section* find_section_if(ELFIO::elfio& reader, P p) {
             const auto it = std::find_if(reader.sections.begin(), reader.sections.end(), std::move(p));
             return it != reader.sections.end() ? *it : nullptr;
         }
+#endif
 
         template<typename T = std::vector<std::vector<char>>>
         static
@@ -152,7 +357,7 @@ namespace hc2
         }
 
         static
-        const std::vector<Bundled_code_header>& shared_object_kernel_sections_()
+        const std::vector<Bundled_code_header>& kernel_sections_()
         {
             static std::vector<Bundled_code_header> r;
             static std::once_flag f;
@@ -199,19 +404,21 @@ namespace hc2
         {
             for (auto&& z : bundles(x)) {
                 y[triple_to_hsa_isa(z.triple)].push_back(
+                /*
                     make_code_object_reader(z.blob));
+                */ z.blob);
             }
             y.erase(hsa_isa_t{0});
         }
 
         static
-        const Code_object_table& shared_object_code_object_table_()
+        const Code_object_table& code_object_table_()
         {
             static Code_object_table r;
 
             static std::once_flag f;
             std::call_once(f, []() {
-                for (auto&& x : shared_object_kernel_sections_()) {
+                for (auto&& x : kernel_sections_()) {
                     make_code_object_table_(x, r);
                 }
             });
@@ -232,13 +439,13 @@ namespace hc2
             }
         }
 
-        const Executable_table& shared_object_executable_table_() const
+        const Executable_table& executable_table_() const
         {
             static Executable_table r;
 
             static std::once_flag f;
             std::call_once(f, [this]() {
-               make_executable_table_(shared_object_code_object_table_(), r);
+               make_executable_table_(code_object_table_(), r);
             });
             return r;
         }
@@ -265,13 +472,13 @@ namespace hc2
             }
         }
 
-        const Kernel_table& shared_object_kernel_table_() const
+        const Kernel_table& kernel_table_() const
         {
             static Kernel_table r;
 
             static std::once_flag f;
             std::call_once(f, [this]() {
-                make_kernel_table_(shared_object_executable_table_(), r);
+                make_kernel_table_(executable_table_(), r);
             });
 
             return r;
