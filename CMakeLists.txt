@@ -471,6 +471,10 @@ add_subdirectory(amp-conformance)
 add_subdirectory(stl-test)
 add_subdirectory(cmake-tests)
 
+# copy/install the HIP builtins
+file(COPY hip DESTINATION "${PROJECT_BINARY_DIR}")
+install(DIRECTORY hip DESTINATION ".")
+
 # create documentation
 configure_file(
   ${PROJECT_SOURCE_DIR}/lib/doxygen_config.in

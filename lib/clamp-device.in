@@ -37,6 +37,9 @@ KMHACKLLVM="${KMHACKLLVM:=0}"
 # enable ThinLTO
 KMTHINLTO="${KMTHINLTO:=0}"
 
+# flag for early finalization
+AMDGPU_OBJ_CODEGEN="0"
+
 if [ $KMDBSCRIPT == "1" ]
 then
   set -x
@@ -99,6 +102,10 @@ do
     AMDGPU_TARGET="${ARG#*=}"
     continue
     ;;
+    --early-finalize)
+    AMDGPU_OBJ_CODEGEN="1"
+    continue
+    ;;
     --hcc-extra-libs=*)
     HCC_EXTRA_LIBRARIES="$HCC_EXTRA_LIBRARIES ${ARG#*=}"
     continue
@@ -159,6 +166,12 @@ elif [ $AMDGPU_TARGET == "gfx906" ]; then
   HCC_EXTRA_ARCH_FILE=$HCC_EXTRA_LIBRARIES_GFX906
 fi
 HCC_BC_LIBS="$ROCM_LIB/hc.amdgcn.bc $ROCM_LIB/opencl.amdgcn.bc $ROCM_LIB/ocml.amdgcn.bc $ROCM_LIB/ockl.amdgcn.bc $ROCM_LIB/irif.amdgcn.bc $OCLC_ISA_VERSION_LIB $ROCM_LIB/oclc_finite_only_off.amdgcn.bc $ROCM_LIB/oclc_daz_opt_off.amdgcn.bc $ROCM_LIB/oclc_correctly_rounded_sqrt_on.amdgcn.bc $ROCM_LIB/oclc_unsafe_math_off.amdgcn.bc"
+
+# link-in the HIP device libraries only during early finalization
+if [ $AMDGPU_OBJ_CODEGEN == "1" ]; then
+  HIP_LIB_DIR="$(readlink -f -- "$ROCM_LIB/../../hip")"
+  HCC_BC_LIBS="$HIP_LIB_DIR/device_function.hip.ll $HIP_LIB_DIR/device_util.hip.ll $HIP_LIB_DIR/hip_ldg.hip.ll  $HCC_BC_LIBS"
+fi
 
 # include libraries specified through the HCC_EXTRA_LIBRARIES environment variable
 HCC_BC_LIBS="$HCC_BC_LIBS  $HCC_EXTRA_LIBRARIES $HCC_EXTRA_ARCH_FILE"
