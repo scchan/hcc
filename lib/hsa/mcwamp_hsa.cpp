@@ -2176,6 +2176,10 @@ public:
     // remove finished async operation from waiting list
     void removeAsyncOp(HSAOp* asyncOp) {
 
+        decltype(asyncOps) temp_ops;
+        
+        {
+
         std::lock_guard<std::recursive_mutex> lg(qmutex);
 
         int targetIndex = asyncOp->asyncOpsIndex();
@@ -2191,7 +2195,10 @@ public:
             for (int i = targetIndex; i>=0; i--) {
                 Kalmar::KalmarAsyncOp *op = asyncOps[i].get();
                 if (op) {
-                    asyncOps[i].reset();
+
+
+                  //  asyncOps[i].reset();
+                    temp_ops.push_back(std::move(asyncOps[i]));
 
         #if CHECK_OLDER_COMPLETE
                     // opportunistically update status for any ops we encounter along the way:
@@ -2221,6 +2228,11 @@ public:
             DBOUTL(DB_RESOURCE, "asyncOps size=" << asyncOps.size() << " exceeds collection size, compacting");
             asyncOps.erase(std::remove(asyncOps.begin(), asyncOps.end(), nullptr),
                          asyncOps.end());
+        }
+
+        }
+        for (auto& d : temp_ops) {
+          d.reset();
         }
     }
 };
