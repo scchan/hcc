@@ -1588,6 +1588,7 @@ public:
       while (1) {
         std::shared_ptr<HSAOp> r;
         {
+          bool found = false;
           std::lock_guard<std::recursive_mutex> lg(qmutex);
           for (int i = 0; i < asyncOps.size(); i++) {
             if (asyncOps[i] != nullptr) {
@@ -1595,13 +1596,16 @@ public:
               std::shared_future<void>* future = asyncOps[i]->getFuture();
               if (future && future->valid()) {
                 r = std::move(asyncOps[i]);
+                found = true;
                 break;
               }
             }
           }
           // not more valid asyncOps
-          asyncOps.clear();
-          return;
+          if (!found) {
+            asyncOps.clear();
+            return;
+          }
         }
         r.reset();
       }
