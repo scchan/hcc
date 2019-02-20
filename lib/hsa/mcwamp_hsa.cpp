@@ -1634,33 +1634,7 @@ public:
             printAsyncOps(std::cerr);
         }
 
-
-#if 1
         drain();
-#else
-        {
-            std::lock_guard<std::recursive_mutex> lg(qmutex);
-            bool foundFirstValidOp = false;
-            for (int i = asyncOps.size()-1; i >= 0;  i--) {
-                if (asyncOps[i] != nullptr) {
-                    auto asyncOp = asyncOps[i];
-                    if (!foundFirstValidOp) {
-                        hsa_signal_t sig =  *(static_cast <hsa_signal_t*> (asyncOp->getNativeHandle()));
-                        assert(sig.handle != 0);
-                        foundFirstValidOp = true;
-                    }
-                    // wait on valid futures only
-                    std::shared_future<void>* future = asyncOp->getFuture();
-                    if (future && future->valid()) {
-                        future->wait();
-                    }
-                }
-            }
-
-            // clear async operations table
-            asyncOps.clear();
-        }
-#endif
    }
 
     void LaunchKernel(void *ker, size_t nr_dim, size_t *global, size_t *local) override {
@@ -2246,15 +2220,6 @@ public:
               }
             }
           }
-
-#if 0
-          // GC for finished kernels
-          if (asyncOps.size() > ASYNCOPS_VECTOR_GC_SIZE) {
-              DBOUTL(DB_RESOURCE, "asyncOps size=" << asyncOps.size() << " exceeds collection size, compacting");
-              asyncOps.erase(std::remove(asyncOps.begin(), asyncOps.end(), nullptr),
-                           asyncOps.end());
-          }
-#endif
         }
         for (auto& d : ops_to_be_reset) {
           d.reset();
