@@ -585,7 +585,7 @@ endif (OFFICIAL_RELEASE_BUILD)
 
 
 if (USE_PROF_API)
-  set(HCC_ROCTRACER_DEP ", roctracer-proto")
+  set(HCC_ROCTRACER_DEP ", roctracer-dev")
 else (USE_PROF_API)
   set(HCC_ROCTRACER_DEP "")
 endif (USE_PROF_API)
