@@ -1719,8 +1719,9 @@ public:
                      });
         }
 
-        waitForStreamDeps(dispatch);
+        std::lock_guard<std::recursive_mutex> lg(qmutex);
 
+        waitForStreamDeps(dispatch);
 
         // create a shared_ptr instance
         std::shared_ptr<KalmarAsyncOp> sp_dispatch(dispatch);
@@ -2075,7 +2076,7 @@ public:
         STATUS_CHECK(status, __LINE__);
 
         // associate the barrier with this queue
-        pushAsyncOp(std::move(barrier));
+        pushAsyncOp(barrier);
 
         return barrier;
     }
@@ -2158,7 +2159,7 @@ public:
             STATUS_CHECK(status, __LINE__);
 
             // associate the barrier with this queue
-            pushAsyncOp(std::move(barrier));
+            pushAsyncOp(barrier);
 
             return barrier;
         } else {
@@ -4231,6 +4232,8 @@ std::shared_ptr<KalmarAsyncOp> HSAQueue::EnqueueAsyncCopyExt(const void* src, vo
     const Kalmar::HSADevice *copyDeviceHsa = static_cast<const Kalmar::HSADevice*> (copyDevice);
     std::shared_ptr<HSACopy> copyCommand = std::make_shared<HSACopy>(this, src, dst, size_bytes);
 
+    std::lock_guard<std::recursive_mutex> lg(qmutex);
+
     // euqueue the async copy command
     status = copyCommand.get()->enqueueAsyncCopyCommand(copyDeviceHsa, srcPtrInfo, dstPtrInfo);
     STATUS_CHECK(status, __LINE__);
@@ -4251,6 +4254,8 @@ std::shared_ptr<KalmarAsyncOp> HSAQueue::EnqueueAsyncCopy2dExt(const void* src, 
     //create shared_ptr instance
     const Kalmar::HSADevice *copy2dDeviceHsa = static_cast<const Kalmar::HSADevice*> (copyDevice);
     std::shared_ptr<HSACopy> copy2dCommand = std::make_shared<HSACopy>(this, src, dst, width*height);
+
+    std::lock_guard<std::recursive_mutex> lg(qmutex);
 
     //euqueue the async copy command
     status = copy2dCommand.get()->enqueueAsyncCopy2dCommand(width, height, srcPitch, dstPitch, copy2dDeviceHsa, srcPtrInfo, dstPtrInfo);
@@ -4302,6 +4307,8 @@ std::shared_ptr<KalmarAsyncOp> HSAQueue::EnqueueAsyncCopy(const void *src, void 
         copyDevice = nullptr; // H2H
     }
 
+    std::lock_guard<std::recursive_mutex> lg(qmutex);
+
     // enqueue the async copy command
     status = copyCommand.get()->enqueueAsyncCopyCommand(copyDevice, srcPtrInfo, dstPtrInfo);
     STATUS_CHECK(status, __LINE__);
@@ -4335,6 +4342,8 @@ HSAQueue::dispatch_hsa_kernel(const hsa_kernel_dispatch_packet_t *aql,
 
 
     Kalmar::HSADevice* device = static_cast<Kalmar::HSADevice*>(this->getDev());
+
+    std::lock_guard<std::recursive_mutex> lg(qmutex);
 
     std::shared_ptr<HSADispatch> sp_dispatch = std::make_shared<HSADispatch>(device, this/*queue*/, nullptr, aql);
     if (HCC_OPT_FLUSH) {
