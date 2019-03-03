@@ -3989,7 +3989,14 @@ void HSAQueue::dispose() override {
         // clear asyncOps to trigger any lingering resource cleanup while we still hold the locks
         // this implicitly waits on all remaining async ops as they destruct, including the
         // possible marker from above
-        asyncOps.clear();
+
+        //asyncOps.clear();
+        for (int n = 0; n < asyncOps.size(); ++n) {
+          int i = asyncOpsIndex + n;
+          if (i >= asyncOps.size())
+            i-=asyncOps.size();
+          asyncOps[i].reset();
+        }
 
         this->valid = false;
 
