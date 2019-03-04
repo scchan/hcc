@@ -5482,9 +5482,6 @@ HSACopy::enqueueAsyncCopy2dCommand(size_t width, size_t height, size_t srcPitch,
 inline void
 HSACopy::dispose() {
 
-    // clear reference counts for dependent ops.
-    depAsyncOp = nullptr;
-
     if (future != nullptr) {
         delete future;
         future = nullptr;
@@ -5510,6 +5507,9 @@ HSACopy::dispose() {
             LOG_PROFILE(this, start, end, "copyslo", getCopyCommandString(),  "\t" << sizeBytes << " bytes;\t" << sizeBytes/1024.0/1024 << " MB;\t" << bw << " GB/s;");
         }
     }
+
+    // clear reference counts for dependent ops.
+    depAsyncOp = nullptr;
 }
 
 inline uint64_t
