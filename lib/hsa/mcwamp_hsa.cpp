@@ -5244,7 +5244,6 @@ hsa_status_t HSACopy::hcc_memory_async_copy(Kalmar::hcCommandKind copyKind, cons
                       << "  copyAgent=" << copyDevice
                       << "\n");
         }
-        isAsync = true;
     }
 
     /* ROCR logic to select the copy agent:
@@ -5269,7 +5268,7 @@ hsa_status_t HSACopy::hcc_memory_async_copy(Kalmar::hcCommandKind copyKind, cons
                    << ",depSignalCnt=" << depSignalCnt << "," << &depSignal << ","
                    << std::hex << _signal.handle << "\n" << std::dec);
 
-    status = hsa_amd_memory_async_copy(dstPtr, dstAgent, srcPtr, srcAgent, sizeBytes, depSignalCnt, &depSignal, _signal);
+    status = hsa_amd_memory_async_copy(dstPtr, dstAgent, srcPtr, srcAgent, sizeBytes, depSignalCnt, depSignalCnt?&depSignal:nullptr, _signal);
     if (status != HSA_STATUS_SUCCESS) {
         throw Kalmar::runtime_exception("hsa_amd_memory_async_copy error", status);
     }
