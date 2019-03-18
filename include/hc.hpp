@@ -266,6 +266,8 @@ public:
      */
     completion_future create_marker(memory_scope fence_scope=system_scope) const;
 
+    completion_future create_ipc_marker(memory_scope fence_scope=system_scope) const;
+
     /**
      * This command inserts a marker event into the accelerator_view's command
      * queue with a prior dependent asynchronous event.
@@ -1506,6 +1508,21 @@ accelerator_view::create_marker(memory_scope scope) const {
     }
 
     return completion_future(pQueue->EnqueueMarkerWithDependency(cnt, deps, scope));
+}
+
+inline completion_future
+accelerator_view::create_ipc_marker(memory_scope scope) const {
+    std::shared_ptr<Kalmar::KalmarAsyncOp> deps[1]; 
+    // If necessary create an explicit dependency on previous command
+    // This is necessary for example if copy command is followed by marker - we need the marker to wait for the copy to complete.
+    std::shared_ptr<Kalmar::KalmarAsyncOp> depOp = pQueue->detectStreamDeps(hcCommandMarker, nullptr);
+
+    int cnt = 0;
+    if (depOp) {
+        deps[cnt++] = depOp; // retrieve async op associated with completion_future
+    }
+
+    return completion_future(pQueue->EnqueueIPCMarkerWithDependency(cnt, deps, scope));
 }
 
 inline unsigned int accelerator_view::get_version() const { return get_accelerator().get_version(); }
