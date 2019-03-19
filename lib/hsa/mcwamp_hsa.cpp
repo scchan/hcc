@@ -4203,6 +4203,10 @@ HSAQueue::getHSAAMRegion() override {
     return static_cast<void*>(&(static_cast<HSADevice*>(getDev())->getHSAAMRegion()));
 }
 inline void*
+HSAQueue::getHSAFinegrainedAMRegion() override {
+    return static_cast<void*>(&(static_cast<HSADevice*>(getDev())->getHSAFinegrainedAMRegion()));
+}
+inline void*
 HSAQueue::getHSACoherentAMHostRegion() override {
     return static_cast<void*>(&(static_cast<HSADevice*>(getDev())->getHSACoherentAMHostRegion()));
 }
