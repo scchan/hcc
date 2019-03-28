@@ -14,6 +14,7 @@
 #include <hc.hpp>
 
 #include <hsa/hsa.h>
+#include <hsa/hsa_ext_amd.h>
 
 #include "../../external/elfio/elfio.hpp"
 
@@ -104,13 +105,55 @@ namespace hc2
         }
     }
 
+
+    struct Symbol {
+        std::string name;
+        ELFIO::Elf64_Addr value = 0;
+        ELFIO::Elf_Xword size = -1;
+        ELFIO::Elf_Half sect_idx = -1;
+        std::uint8_t bind = 0;
+        std::uint8_t type = 0;
+        std::uint8_t other = 0;
+    };
+
+    inline
+    Symbol read_symbol(
+        const ELFIO::symbol_section_accessor& section, unsigned int idx)
+    {
+        assert(idx < section.get_symbols_num());
+
+        Symbol r;
+        section.get_symbol(
+            idx, r.name, r.value, r.size, r.bind, r.type, r.sect_idx, r.other);
+
+        return r;
+    }
+
+    template<typename P>
+    inline
+    ELFIO::section* find_section_if(ELFIO::elfio& reader, P p)
+    {
+        using namespace std;
+
+        const auto it = find_if(
+            reader.sections.begin(), reader.sections.end(), move(p));
+
+        return it != reader.sections.end() ? *it : nullptr;
+    }
+
     class Program_state {
         using Code_object_table = std::unordered_map<
-            hsa_isa_t, std::vector<RAII_code_object_reader>>;
+            hsa_isa_t, std::pair<std::vector<RAII_code_object_reader>, std::vector<std::string>>>;
         using Executable_table = std::unordered_map<
             hsa_agent_t, std::vector<RAII_executable>>;
         using Kernel_table = std::unordered_map<
             hsa_agent_t, std::vector<hsa_executable_symbol_t>>;
+
+        using RAII_global = std::unique_ptr<void, decltype(hsa_amd_memory_unlock)*>;
+        using RAII_global_table = std::unordered_map<
+            std::string, RAII_global>;
+        using Host_symbol_table = std::unordered_map<
+            std::string, std::pair<ELFIO::Elf64_Addr, ELFIO::Elf_Xword>>;
 
         friend const Program_state& program_state();
 
@@ -122,6 +165,79 @@ namespace hc2
         }
 
         std::vector<hc::accelerator> acc_;
+
+
+
+
+    static
+    const Host_symbol_table& symbol_addresses()
+    {
+        using namespace ELFIO;
+        using namespace std;
+
+        static Host_symbol_table r;
+        static once_flag f;
+
+        call_once(f, []() {
+            dl_iterate_phdr([](dl_phdr_info* info, size_t, void*) {
+                static constexpr const char self[] = "/proc/self/exe";
+                elfio reader;
+
+                static unsigned int iter = 0u;
+                if (reader.load(!iter++ ? self : info->dlpi_name)) {
+                    auto it = find_section_if(
+                        reader, [](const class section* x) {
+                        return x->get_type() == SHT_SYMTAB;
+                    });
+
+                    if (it) {
+                        const symbol_section_accessor symtab{reader, it};
+
+                        for (auto i = 0u; i != symtab.get_symbols_num(); ++i) {
+                            auto tmp = read_symbol(symtab, i);
+
+                            if (tmp.type == STT_OBJECT &&
+                                tmp.sect_idx != SHN_UNDEF) {
+                                r.emplace(
+                                    move(tmp.name),
+                                    make_pair(tmp.value, tmp.size));
+                            }
+                        }
+                    }
+                }
+
+                return 0;
+            }, nullptr);
+        });
+
+        return r;
+    }
+
+
+
+
+    inline
+    std::vector<std::string> copy_names_of_undefined_symbols(
+        const ELFIO::symbol_section_accessor& section)
+    {
+        using namespace ELFIO;
+        using namespace std;
+
+        vector<string> r;
+
+        for (auto i = 0u; i != section.get_symbols_num(); ++i) {
+            // TODO: this is boyscout code, caching the temporaries
+            //       may be of worth.
+
+            auto tmp = read_symbol(section, i);
+            if (tmp.sect_idx == SHN_UNDEF && !tmp.name.empty()) {
+                r.push_back(std::move(tmp.name));
+            }
+        }
+
+        return r;
+    }
+
 
         template<typename T = std::vector<std::vector<char>>>
         static
@@ -175,12 +291,20 @@ namespace hc2
         }
 
         static
+        inline
+        void add_undefined_symbols(const std::vector<char>& blob,
+                                       std::vector<std::string>& table) 
+        {
+        }
+
+        static
         void make_code_object_table_(
             const Bundled_code_header& x, Code_object_table& y)
         {
             for (auto&& z : bundles(x)) {
-                y[triple_to_hsa_isa(z.triple)].push_back(
-                    make_code_object_reader(z.blob));
+                auto& t = y[triple_to_hsa_isa(z.triple)];
+                t.first.push_back(make_code_object_reader(z.blob));
+                add_undefined_symbols(z.blob, t.second);
             }
             y.erase(hsa_isa_t{0});
         }
@@ -206,7 +330,7 @@ namespace hc2
             for (auto&& a : acc_) {
                 const auto it = x.find(hsa_agent_isa(a));
                 if (it != x.cend()) {
-                    for (auto&& z : it->second) {
+                    for (auto&& z : it->second.first) {
                         y[hsa_agent(a)].push_back(executable(z, hsa_agent(a)));
                     }
                 }
