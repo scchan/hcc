@@ -132,7 +132,9 @@ namespace hc2
             auto out = static_cast<T*>(kernels);
 
             ELFIO::elfio tmp;
-            if (tmp.load(x->dlpi_name)) {
+            const auto elf =
+                x->dlpi_addr ? x->dlpi_name : "/proc/self/exe";
+            if (tmp.load(elf)) {
                 for (auto&& y : tmp.sections) {
                     if (y->get_name() == kernel) {
                         out->emplace_back(

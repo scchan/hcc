@@ -2768,11 +2768,6 @@ public:
     }
 
     void* CreateKernel(const char* fun, Kalmar::KalmarQueue *queue) override {
-        // try load kernels lazily in case it was not done so at bootstrap
-        // due to HCC_LAZYINIT env var
-        if (executables.size() == 0) {
-          CLAMP::LoadInMemoryProgram(queue);
-        }
 
         std::string str(fun);
         HSAKernel *kernel = programs[str];

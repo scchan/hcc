@@ -349,15 +349,7 @@ static void read_code_bundles(std::vector<_code_bundle>& bundles) {
 }
 
 void LoadInMemoryProgram(KalmarQueue* pQueue) {
-  static std::vector<_code_bundle> bundles;
-  static std::once_flag f;
-  std::call_once(f, [&](){ read_code_bundles(bundles); });
 
-  for (auto&& b : bundles) {
-    if (pQueue->getDev()->IsCompatibleKernel((void*) b.size, (void*) b.device_binary)) {
-      pQueue->getDev()->BuildProgram((void*) b.size, (void*) b.device_binary);
-    }
-  }
 }
 
 // used in parallel_for_each.h
@@ -406,12 +398,8 @@ public:
 
       // load kernels on the default queue for each device
       for (auto dev = devices.begin(); dev != devices.end(); dev++) {
-
         // get default queue on the device
         std::shared_ptr<KalmarQueue> queue = (*dev)->get_default_queue();
-
-        // load kernels on the default queue for the device
-        CLAMP::LoadInMemoryProgram(queue.get());
       }
     }
   }
