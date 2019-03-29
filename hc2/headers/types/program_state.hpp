@@ -25,6 +25,7 @@
 #include <mutex>
 #include <ostream>
 #include <string>
+#include <sstream>
 #include <unordered_map>
 
 namespace hc2
@@ -292,9 +293,33 @@ namespace hc2
 
         static
         inline
-        void add_undefined_symbols(const std::vector<char>& blob,
-                                       std::vector<std::string>& table) 
+        void copy_names_of_undefined_symbols(const std::vector<char>& blob,
+                                             std::vector<std::string>& r) 
         {
+            ELFIO::elfio reader;
+            std::stringstream bstream{std::string(blob.data(),
+                                                blob.size())};
+            if (!reader.load(bstream)) {
+              //std::cerr << "failed to load ELF" << std::endl;
+              return;
+            }
+            else {
+              std::cerr << "ELF loaded!" << std::endl;
+            }
+
+            ELFIO::symbol_section_accessor section{reader,
+                find_section_if(reader,  [](const ELFIO::section* x) {
+                                             return x->get_type() == SHT_DYNSYM;
+                                          })};
+
+            for (auto i = 0u; i != section.get_symbols_num(); ++i) {
+                // TODO: this is boyscout code, caching the temporaries
+                //       may be of worth.
+                auto tmp = read_symbol(section, i);
+                if (tmp.sect_idx == SHN_UNDEF && !tmp.name.empty()) {
+                    r.push_back(std::move(tmp.name));
+                }
+            }
         }
 
         static
@@ -304,7 +329,7 @@ namespace hc2
             for (auto&& z : bundles(x)) {
                 auto& t = y[triple_to_hsa_isa(z.triple)];
                 t.first.push_back(make_code_object_reader(z.blob));
-                add_undefined_symbols(z.blob, t.second);
+                //copy_names_of_undefined_symbols(z.blob, t.second);
             }
             y.erase(hsa_isa_t{0});
         }
