@@ -64,7 +64,7 @@ endif()
 set(NUM_TEST_THREADS "4" CACHE STRING "Number of test threads")
 
 add_custom_target(test
-  COMMAND python ${LLVM_ROOT}/bin/llvm-lit -j ${NUM_TEST_THREADS} --path ${LLVM_TOOLS_DIR} -sv ${CMAKE_CURRENT_BINARY_DIR}
+  COMMAND python ${LLVM_ROOT}/bin/llvm-lit -j 32  --path ${LLVM_TOOLS_DIR} -sv ${CMAKE_CURRENT_BINARY_DIR}
   # DEPENDS ${CPPAMP_GTEST_LIB}
   COMMENT "Running HCC regression tests")
 

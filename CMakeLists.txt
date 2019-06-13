@@ -1,6 +1,8 @@
 cmake_minimum_required( VERSION 3.4.3 )
 project (HCC)
 
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+
 include(GNUInstallDirs)
 
 SET(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/scripts/cmake")
