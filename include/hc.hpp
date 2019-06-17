@@ -1034,9 +1034,16 @@ public:
      * @return An opaque handle of the region, if the accelerator is based
      *         on HSA.  NULL otherwise.
      */
+
+    #if 0
     void* get_hsa_am_region() const {
         return get_default_view().get_hsa_am_region();
     }
+    #else
+    void* get_hsa_am_region() const {
+        return pDev->get_hsa_am_region();
+    }   
+    #endif
 
     /**
      * Returns an opaque handle which points to the finegrained AM region on the HSA agent.

@@ -323,7 +323,7 @@ public:
 
   uint64_t assign_op_seq_num() { return ++opSeqNums; };
 
-private:
+protected:
   KalmarDevice* pDev;
   queuing_mode mode;
   execute_order order;
@@ -452,6 +452,7 @@ public:
 
     virtual bool has_cpu_accessible_am() {return false;}
 
+    virtual void* get_hsa_am_region() { return nullptr; }
 };
 
 class CPUQueue final : public KalmarQueue

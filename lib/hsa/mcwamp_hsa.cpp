@@ -1996,46 +1996,8 @@ public:
                              const void * args, size_t argsize,
                              hc::completion_future *cf, const char *kernelName) override ;
 
-    bool set_cu_mask(const std::vector<bool>& cu_mask) override {
-        // get device's total compute unit count
-        auto device = getDev();
-        unsigned int physical_count = device->get_compute_unit_count();
-        assert(physical_count > 0);
-
-        uint32_t temp = 0;
-        uint32_t bit_index = 0;
-
-        // If cu_mask.size() is greater than physical_count, igore the rest.
-        int iter = cu_mask.size() > physical_count ? physical_count : cu_mask.size();
-
-
-        {
-            std::lock_guard<std::recursive_mutex> l(this->qmutex);
-
-
-            this->cu_arrays.clear();
-
-            for(auto i = 0; i < iter; i++) {
-                temp |= (uint32_t)(cu_mask[i]) << bit_index;
-
-                if(++bit_index == 32) {
-                    this->cu_arrays.push_back(temp);
-                    bit_index = 0;
-                    temp = 0;
-                }
-            }
-
-            if(bit_index != 0) {
-                this->cu_arrays.push_back(temp);
-            }
-
-
-            // Apply the new cu mask to the hw queue:
-            return (rocrQueue->setCuMask(this) == HSA_STATUS_SUCCESS);
-
-        }
-    }
-
+    bool set_cu_mask(const std::vector<bool>& cu_mask) override;
+   
     // enqueue a barrier packet
     std::shared_ptr<KalmarAsyncOp> EnqueueMarker(memory_scope release_scope) override {
 
@@ -2609,6 +2571,10 @@ public:
     uint32_t get_version() const { return ((static_cast<unsigned int>(versionMajor) << 16) | versionMinor); }
 
     bool has_cpu_accessible_am() const override { return cpu_accessible_am; }
+
+    void* get_hsa_am_region() override {
+      return static_cast<void*>(&(ri._am_memory_pool));
+    }
 
     void* create(size_t count, struct rw_info* key) override {
         void *data = nullptr;
@@ -3989,6 +3955,8 @@ HSAQueue::HSAQueue(KalmarDevice* pDev, hsa_agent_t agent, execute_order order, q
     asyncOps(HCC_ASYNCOPS_SIZE), asyncOpsIndex(0),
     valid(true), _nextSyncNeedsSysRelease(false), _nextKernelNeedsSysAcquire(false), bufferKernelMap(), kernelBufferMap()
 {
+
+#if 0
     {
         // Protect the HSA queue we can steal it.
         DBOUT(DB_LOCK, " ptr:" << this << " create lock_guard...\n");
@@ -3998,7 +3966,7 @@ HSAQueue::HSAQueue(KalmarDevice* pDev, hsa_agent_t agent, execute_order order, q
         auto device = static_cast<Kalmar::HSADevice*>(this->getDev());
         device->createOrstealRocrQueue(this, priority);
     }
-
+#endif
 
     youngestCommandKind = hcCommandInvalid;
 
@@ -4301,7 +4269,51 @@ HSAQueue::dispatch_hsa_kernel(const hsa_kernel_dispatch_packet_t *aql,
     if (cf) {
         *cf = hc::completion_future(sp_dispatch);
     }
-};
+}
+
+bool HSAQueue::set_cu_mask(const std::vector<bool>& cu_mask) override {
+        // get device's total compute unit count
+        auto device = getDev();
+        unsigned int physical_count = device->get_compute_unit_count();
+        assert(physical_count > 0);
+
+        uint32_t temp = 0;
+        uint32_t bit_index = 0;
+
+        // If cu_mask.size() is greater than physical_count, igore the rest.
+        int iter = cu_mask.size() > physical_count ? physical_count : cu_mask.size();
+
+
+        {
+            std::lock_guard<std::recursive_mutex> l(this->qmutex);
+
+
+            this->cu_arrays.clear();
+
+            for(auto i = 0; i < iter; i++) {
+                temp |= (uint32_t)(cu_mask[i]) << bit_index;
+
+                if(++bit_index == 32) {
+                    this->cu_arrays.push_back(temp);
+                    bit_index = 0;
+                    temp = 0;
+                }
+            }
+
+            if(bit_index != 0) {
+                this->cu_arrays.push_back(temp);
+            }
+
+
+            // Apply the new cu mask to the hw queue:
+            if (!rocrQueue) {
+                //auto device = static_cast<Kalmar::HSADevice*>(this->getHSADev());
+                getHSADev()->createOrstealRocrQueue(this, priority);
+            }
+            return (rocrQueue->setCuMask(this) == HSA_STATUS_SUCCESS);
+
+        }
+    }
 
 } // namespace Kalmar
 
