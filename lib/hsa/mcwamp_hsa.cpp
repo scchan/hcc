@@ -1193,8 +1193,9 @@ struct RocrQueue {
     }
 
     RocrQueue(hsa_agent_t agent, size_t queue_size, HSAQueue *hccQueue, queue_priority priority)
-        : _priority(priority)
+        : _priority(priority_normal)
     {
+#if 0
         // Map queue_priority to hsa_amd_queue_priority_t
         hsa_amd_queue_priority_t queue_priority;
         switch (priority) {
@@ -1209,6 +1210,7 @@ struct RocrQueue {
                 queue_priority = HSA_AMD_QUEUE_PRIORITY_NORMAL;
                 break;
         }
+#endif
 
         assert(queue_size != 0);
 
@@ -1219,8 +1221,12 @@ struct RocrQueue {
         STATUS_CHECK(status, __LINE__);
 
         // Set queue priority
+#if 0
         status = hsa_amd_queue_set_priority(_hwQueue, queue_priority);
         DBOUT(DB_QUEUE, "  " <<  __func__ << ": set priority for HSA command queue: " << _hwQueue << " to " << queue_priority << "\n");
+#else
+        status = setPriority(priority);
+#endif
         STATUS_CHECK(status, __LINE__);
 
         // TODO - should we provide a mechanism to conditionally enable profiling as a performance optimization?
@@ -1240,6 +1246,8 @@ struct RocrQueue {
     };
 
     void assignHccQueue(HSAQueue *hccQueue);
+
+    hsa_status_t setPriority(queue_priority p);
 
     hsa_status_t setCuMask(HSAQueue *hccQueue);
 
@@ -2183,6 +2191,37 @@ void RocrQueue::assignHccQueue(HSAQueue *hccQueue) {
     setCuMask(hccQueue);
 }
 
+hsa_status_t RocrQueue::setPriority(queue_priority p) {
+    auto status = HSA_STATUS_SUCCESS;
+    if (p != _priority) {
+          // Map queue_priority to hsa_amd_queue_priority_t
+        hsa_amd_queue_priority_t h_priority;
+        switch (p) {
+            case priority_low:
+                h_priority = HSA_AMD_QUEUE_PRIORITY_LOW;
+                break;
+            case priority_high:
+                h_priority = HSA_AMD_QUEUE_PRIORITY_HIGH;
+                break;
+            case priority_normal:
+                h_priority = HSA_AMD_QUEUE_PRIORITY_NORMAL;
+                break;
+            default:
+                {
+                    std::stringstream msg;
+                    msg << "Unknown priority value " << p;
+                    throw Kalmar::runtime_exception(msg.str().c_str(), -1);
+                }
+                break;
+        }
+        _priority = p;
+        // Set queue priority
+        status = hsa_amd_queue_set_priority(_hwQueue, h_priority);
+        DBOUT(DB_QUEUE, "  " <<  __func__ << ": set priority for HSA command queue: " << _hwQueue << " to " << h_priority << "\n");       
+    }
+    return status;
+}
+
 hsa_status_t RocrQueue::setCuMask(HSAQueue *hccQueue) {
     hsa_status_t status = HSA_STATUS_SUCCESS;
 
@@ -2281,11 +2320,35 @@ public:
                         return;
                     }
                 }
-            }
-
+    
             // Second pass, try steal from a ROCR queue associated with an HCC queue, but with no active tasks
             {
                 std::lock_guard<std::mutex> lg(rocrQueuesMutex);
+#if 1
+                for (int p = priority_low; priority >= priority_high; --p) {
+                    for (auto rq : rocrQueues[p]) {
+                        if (rq->_hccQueue == nullptr) {
+                            DBOUT(DB_QUEUE, "Found unused rocrQueue=" << rq << " for thief=" << thief << ".  hwQueue=" << rq->_hwQueue << "\n")
+                            // update the queue pointers to indicate the theft
+                            rq->assignHccQueue(thief);
+                            return;
+                        } else if (rq->_hccQueue != thief)  {
+                            auto victimHccQueue = rq->_hccQueue;
+                            std::lock_guard<std::recursive_mutex> l(victimHccQueue->qmutex);
+                            if (victimHccQueue->isEmpty()) {
+                                DBOUT(DB_LOCK, " ptr:" << this << " lock_guard...\n");
+                                assert (victimHccQueue->rocrQueue == rq);  // ensure the link is consistent.
+                                victimHccQueue->rocrQueue = nullptr;
+
+                                // update the queue pointers to indicate the theft:
+                                rq->assignHccQueue(thief);
+                                DBOUT(DB_QUEUE, "Stole existing rocrQueue=" << rq << " from victimHccQueue=" << victimHccQueue << " to hccQueue=" << thief << "\n")
+                                return; // for
+                            }
+                        }
+                    }
+                }
+#else
                 for (auto rq : rocrQueues[priority]) {
 
                     if (rq->_hccQueue == nullptr) {
@@ -2308,6 +2371,7 @@ public:
                         }
                     }
                 }
+#endif
             }
         }
     };
@@ -2527,9 +2591,6 @@ public:
         STATUS_CHECK(err, __LINE__);
         return access;
     }
-
-
-
 
 
     HSADevice(hsa_agent_t a, hsa_agent_t host, int x_accSeqNum);
