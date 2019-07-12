@@ -1195,23 +1195,6 @@ struct RocrQueue {
     RocrQueue(hsa_agent_t agent, size_t queue_size, HSAQueue *hccQueue, queue_priority priority)
         : _priority(priority_normal)
     {
-#if 0
-        // Map queue_priority to hsa_amd_queue_priority_t
-        hsa_amd_queue_priority_t queue_priority;
-        switch (priority) {
-            case priority_low:
-                queue_priority = HSA_AMD_QUEUE_PRIORITY_LOW;
-                break;
-            case priority_high:
-                queue_priority = HSA_AMD_QUEUE_PRIORITY_HIGH;
-                break;
-            case priority_normal:
-            default:
-                queue_priority = HSA_AMD_QUEUE_PRIORITY_NORMAL;
-                break;
-        }
-#endif
-
         assert(queue_size != 0);
 
         /// Create a queue using the maximum size.
@@ -1221,12 +1204,7 @@ struct RocrQueue {
         STATUS_CHECK(status, __LINE__);
 
         // Set queue priority
-#if 0
-        status = hsa_amd_queue_set_priority(_hwQueue, queue_priority);
-        DBOUT(DB_QUEUE, "  " <<  __func__ << ": set priority for HSA command queue: " << _hwQueue << " to " << queue_priority << "\n");
-#else
         status = setPriority(priority);
-#endif
         STATUS_CHECK(status, __LINE__);
 
         // TODO - should we provide a mechanism to conditionally enable profiling as a performance optimization?
@@ -1468,13 +1446,7 @@ public:
         youngestCommandKind = op->getCommandKind();
         asyncOps[asyncOpsIndex] = std::move(op);
         asyncOpsIndex = increment(asyncOpsIndex);
-
-        if (DBFLAG(DB_QUEUE)) {
-            printAsyncOps(std::cerr);
-        }
     }
-
-
 
     // Check upcoming command that will be sent to this queue against the youngest async op
     // in the queue to detect if any command dependency is required.
@@ -2320,58 +2292,47 @@ public:
                         return;
                     }
                 }
+            }
     
             // Second pass, try steal from a ROCR queue associated with an HCC queue, but with no active tasks
             {
                 std::lock_guard<std::mutex> lg(rocrQueuesMutex);
-#if 1
                 for (int p = priority_low; priority >= priority_high; --p) {
-                    for (auto rq : rocrQueues[p]) {
+                    auto& rqueues = rocrQueues[p];
+                    for (auto it = rqueues.begin(); it != rqueues.end(); ++it) {
+                        auto rq = *it;
+
+                        auto is_free = [thief](RocrQueue* rq) {
+	
                         if (rq->_hccQueue == nullptr) {
-                            DBOUT(DB_QUEUE, "Found unused rocrQueue=" << rq << " for thief=" << thief << ".  hwQueue=" << rq->_hwQueue << "\n")
-                            // update the queue pointers to indicate the theft
-                            rq->assignHccQueue(thief);
-                            return;
+                            DBOUT(DB_QUEUE, "Found unused rocrQueue=" << rq << "\n")
+                            return true;
                         } else if (rq->_hccQueue != thief)  {
                             auto victimHccQueue = rq->_hccQueue;
                             std::lock_guard<std::recursive_mutex> l(victimHccQueue->qmutex);
                             if (victimHccQueue->isEmpty()) {
-                                DBOUT(DB_LOCK, " ptr:" << this << " lock_guard...\n");
                                 assert (victimHccQueue->rocrQueue == rq);  // ensure the link is consistent.
                                 victimHccQueue->rocrQueue = nullptr;
-
-                                // update the queue pointers to indicate the theft:
-                                rq->assignHccQueue(thief);
-                                DBOUT(DB_QUEUE, "Stole existing rocrQueue=" << rq << " from victimHccQueue=" << victimHccQueue << " to hccQueue=" << thief << "\n")
-                                return; // for
+                                DBOUT(DB_QUEUE, "Stole existing rocrQueue=" << rq << " from victimHccQueue=" << victimHccQueue << "\n")
+                                return true;
                             }
                         }
-                    }
-                }
-#else
-                for (auto rq : rocrQueues[priority]) {
-
-                    if (rq->_hccQueue == nullptr) {
-                        DBOUT(DB_QUEUE, "Found unused rocrQueue=" << rq << " for thief=" << thief << ".  hwQueue=" << rq->_hwQueue << "\n")
-                        // update the queue pointers to indicate the theft
-                        rq->assignHccQueue(thief);
-                        return;
-                    } else if (rq->_hccQueue != thief)  {
-                        auto victimHccQueue = rq->_hccQueue;
-                        std::lock_guard<std::recursive_mutex> l(victimHccQueue->qmutex);
-                        if (victimHccQueue->isEmpty()) {
-                            DBOUT(DB_LOCK, " ptr:" << this << " lock_guard...\n");
-                            assert (victimHccQueue->rocrQueue == rq);  // ensure the link is consistent.
-                            victimHccQueue->rocrQueue = nullptr;
-
-                            // update the queue pointers to indicate the theft:
+			return false;
+			           
+				       };
+			if (is_free(rq)) {
+                            DBOUT(DB_QUEUE, "Assign rocrQueue=" << rq << " to thief=" << thief << ".  hwQueue=" << rq->_hwQueue << "\n")
                             rq->assignHccQueue(thief);
-                            DBOUT(DB_QUEUE, "Stole existing rocrQueue=" << rq << " from victimHccQueue=" << victimHccQueue << " to hccQueue=" << thief << "\n")
-                            return; // for
-                        }
+                            if (p != priority) {
+                                auto status = rq->setPriority(priority);
+                                STATUS_CHECK(status, __LINE__);
+                                rocrQueues[priority].push_back(rq);
+                                rqueues.erase(it);
+                            }
+                            return;
+	                }
                     }
                 }
-#endif
             }
         }
     };
