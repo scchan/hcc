@@ -22,6 +22,13 @@
 #include <link.h>
 #include <dlfcn.h>
 
+#define XSTRINGIFY(X) STRINGIFY(X)
+#define STRINGIFY(X) #X
+//#define LIB_NAME_WITH_VERSION(library) library "." XSTRINGIFY(HCC_MAJOR_VERSION) "."  XSTRINGIFY(HCC_MINOR_VERSION)
+#define LIB_NAME_WITH_VERSION(library) library
+
+
+
 // interface of HCC runtime implementation
 struct RuntimeImpl {
   RuntimeImpl(const char* libraryName) :
@@ -35,7 +42,7 @@ struct RuntimeImpl {
     m_EnableActivityCallbackImpl(nullptr),
     m_GetCmdNameImpl(nullptr),
     isCPU(false) {
-    //std::cout << "dlopen(" << libraryName << ")\n";
+    std::cout << "dlopen(" << libraryName << ")\n";
     m_RuntimeHandle = dlopen(libraryName, RTLD_LAZY);
     if (!m_RuntimeHandle) {
       std::cerr << "C++AMP runtime load error: " << dlerror() << std::endl;
@@ -103,11 +110,11 @@ public:
 
     // detect if C++AMP runtime is available and
     // whether all platform library dependencies are satisfied
-    //std::cout << "dlopen(" << m_ampRuntimeLibrary << ")\n";
+    std::cout << "dlopen(" << m_ampRuntimeLibrary << ")\n";
     handle = dlopen(m_ampRuntimeLibrary.c_str(), RTLD_LAZY);
     if (!handle) {
-      //std::cout << " C++AMP runtime not found" << std::endl;
-      //std::cout << dlerror() << std::endl;
+      std::cout << " C++AMP runtime not found" << std::endl;
+      std::cout << dlerror() << std::endl;
       return false;
     }
     dlerror();  // clear any existing error
@@ -128,7 +135,7 @@ private:
  */
 class HSAPlatformDetect : public PlatformDetect {
 public:
-  HSAPlatformDetect() : PlatformDetect("HSA", "libmcwamp_hsa.so", nullptr) {}
+  HSAPlatformDetect() : PlatformDetect("HSA", LIB_NAME_WITH_VERSION("libmcwamp_hsa.so"), nullptr) {}
 };
 
 
@@ -142,7 +149,7 @@ static RuntimeImpl* LoadHSARuntime() {
   // load HSA C++AMP runtime
   if (mcwamp_verbose)
     std::cout << "Use HSA runtime" << std::endl;
-  runtimeImpl = new RuntimeImpl("libmcwamp_hsa.so");
+  runtimeImpl = new RuntimeImpl(LIB_NAME_WITH_VERSION("libmcwmap_hsa.so"));
   if (!runtimeImpl->m_RuntimeHandle) {
     std::cerr << "Can't load HSA runtime!" << std::endl;
     delete runtimeImpl;
@@ -158,7 +165,7 @@ static RuntimeImpl* LoadCPURuntime() {
   // load CPU runtime
   if (mcwamp_verbose)
     std::cout << "Use CPU runtime" << std::endl;
-  runtimeImpl = new RuntimeImpl("libmcwamp_cpu.so");
+  runtimeImpl = new RuntimeImpl(LIB_NAME_WITH_VERSION("libmcwamp_cpu.so"));
   if (!runtimeImpl->m_RuntimeHandle) {
     std::cerr << "Can't load CPU runtime!" << std::endl;
     delete runtimeImpl;
