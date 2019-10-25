@@ -71,6 +71,9 @@ public:
     std::shared_ptr<KalmarQueue> createQueue(execute_order order = execute_in_order, queue_priority priority = priority_normal) override {
         return std::shared_ptr<KalmarQueue>(new CPUFallbackQueue(this));
     }
+    std::shared_ptr<KalmarQueue> createCooperativeQueue() override {
+        return createQueue();
+    }   
 };
 
 template <typename T> inline void deleter(T* ptr) { delete ptr; }
