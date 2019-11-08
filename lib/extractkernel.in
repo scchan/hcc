@@ -49,7 +49,7 @@ else {
   $llvm_objdump = File::Spec->catfile($tools_path_prefix, "llvm-objdump");
   $clang_offload_bundler = File::Spec->catfile($tools_path_prefix, "clang-offload-bundler");
   if (!(-f $llvm_objdump)) {
-    $tools_path_prefix = File::Spec->catfile($tools_path_prefix, "/../../hcc/bin");
+    $tools_path_prefix = realpath($tools_path_prefix."/../../hcc/bin");
     $llvm_objdump = File::Spec->catfile($tools_path_prefix, "llvm-objdump");
     $clang_offload_bundler = File::Spec->catfile($tools_path_prefix, "clang-offload-bundler");
   }
