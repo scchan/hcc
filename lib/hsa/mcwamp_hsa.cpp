@@ -1165,12 +1165,14 @@ struct pool_iterator
     hsa_amd_memory_pool_t _am_finegrained_memory_pool;
 
     hsa_amd_memory_pool_t _kernarg_memory_pool;
+    hsa_amd_memory_pool_t _agent_coarsegrained_kernarg_memory_pool;
     hsa_amd_memory_pool_t _finegrained_system_memory_pool;
     hsa_amd_memory_pool_t _coarsegrained_system_memory_pool;
     hsa_amd_memory_pool_t _local_memory_pool;
     hsa_amd_memory_pool_t _finegrained_local_memory_pool;
 
     bool        _found_kernarg_memory_pool;
+    bool        _found_agent_coarsegrained_kernarg_memory_pool;
     bool        _found_finegrained_system_memory_pool;
     bool        _found_local_memory_pool;
     bool        _found_coarsegrained_system_memory_pool;
@@ -1184,13 +1186,15 @@ struct pool_iterator
 
 pool_iterator::pool_iterator()
 {
-    _kernarg_memory_pool.handle=(uint64_t)-1;
-    _finegrained_system_memory_pool.handle=(uint64_t)-1;
-    _local_memory_pool.handle=(uint64_t)-1;
-    _coarsegrained_system_memory_pool.handle=(uint64_t)-1;
-    _finegrained_local_memory_pool.handle=(uint64_t)-1;
+    _kernarg_memory_pool.handle = (uint64_t)-1;
+    _agent_coarsegrained_kernarg_memory_pool.handle = (uint64_t)-1;
+    _finegrained_system_memory_pool.handle = (uint64_t)-1;
+    _local_memory_pool.handle = (uint64_t)-1;
+    _coarsegrained_system_memory_pool.handle = (uint64_t)-1;
+    _finegrained_local_memory_pool.handle = (uint64_t)-1;
 
     _found_kernarg_memory_pool = false;
+    _found_agent_coarsegrained_kernarg_memory_pool = false;
     _found_finegrained_system_memory_pool = false;
     _found_local_memory_pool = false;
     _found_coarsegrained_system_memory_pool = false;
@@ -2446,7 +2450,17 @@ public:
             ri->_found_local_memory_pool = true;
             ri->_local_memory_pool_size = size;
           }
-          if (ri->_found_finegrained_local_memory_pool && ri->_found_local_memory_pool) {
+
+          // Look for coarse-grained memory that could be used for kernel arguemnts
+          if ((flags & HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_KERNARG_INIT) &&
+              (flags & HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_COARSE_GRAINED)) {
+            ri->_agent_coarsegrained_kernarg_memory_pool = region;
+            ri->_found_agent_coarsegrained_kernarg_memory_pool = true;
+          }
+
+          if (ri->_found_finegrained_local_memory_pool && 
+              ri->_found_local_memory_pool &&
+              ri->_found_agent_coarsegrained_kernarg_memory_pool) {
             return HSA_STATUS_INFO_BREAK;
           }
         }
