@@ -21,6 +21,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -1056,7 +1057,7 @@ private:
     std::vector<uint8_t> arg_vec;
     uint32_t arg_count;
     size_t prevArgVecCapacity;
-    std::pair<void*, size_t> kernargMemory = {nullptr, 0};
+    std::tuple<void*, size_t, uint32_t> kernargMemory{nullptr, 0, 0};
 
     hsa_kernel_dispatch_packet_t aql;
     hsa_wait_state_t waitMode;
@@ -1367,6 +1368,10 @@ private:
     // indicated whether this HSAQueue has already been used
     // for compute or copy tasks 
     bool has_been_used;
+
+    // For kernarg buffer in coarse grained GPU memory only.
+    // Indicates when was the last synchronization point with the kernarg pool.
+    uint32_t last_kernarg_sync_id;
 
 public:
     HSAQueue(KalmarDevice* pDev, hsa_agent_t agent, execute_order order, queue_priority priority) ;
@@ -2148,6 +2153,8 @@ public:
 
     bool copy2d_ext(const void *src, void *dst, size_t width, size_t height, size_t srcPitch, size_t dstPitch, hc::hcCommandKind copyDir, const hc::AmPointerInfo &srcPtrInfo, const hc::AmPointerInfo &dstPtrInfo, const Kalmar::KalmarDevice *copyDevice, bool forceUnpinnedCopy);
 
+    uint32_t get_last_kernarg_sync_id() { return last_kernarg_sync_id; }
+    void set_last_kernarg_sync_id(uint32_t sync_id) { last_kernarg_sync_id = sync_id; }
 };
 
 
@@ -3076,7 +3083,7 @@ public:
                 hsa_amd_memory_pool_free(b);
             }
         }
-        std::pair<void*, size_t> getKernargBuffer(const size_t size) {
+        std::tuple<void*, size_t, uint32_t> getKernargBuffer(const size_t size) {
             std::lock_guard<std::mutex> l{lock};
             for (auto& p : pools) {
                 if (std::get<_buffer_size>(p) >= size) {
@@ -3098,7 +3105,7 @@ public:
                             sync_id++;
                         }
                     }
-                    auto r = std::make_pair(fp.back(), std::get<_buffer_size>(p));
+                    auto r = std::make_tuple(fp.back(), std::get<_buffer_size>(p), sync_id);
                     fp.pop_back();
                     return r;
                 }               
@@ -3106,12 +3113,14 @@ public:
             throw Kalmar::runtime_exception("Can't find suitable kernarg buffer.", -1);
         }
 
-        void releaseKernargBuffer(const std::pair<void*, size_t>& b) {
-            if (b.first == nullptr) return;
+        void releaseKernargBuffer(const std::tuple<void*, size_t, uint32_t>& b) {
+            const auto kernarg_ptr = std::get<0>(b);
+            const auto kernarg_size = std::get<1>(b);
+            if (kernarg_ptr == nullptr) return;
             std::lock_guard<std::mutex> l{lock};
             for (auto& p : pools) {
-                if (std::get<_buffer_size>(p) == b.second) {
-                    std::get<_released_pool>(p).push_back(b.first);
+                if (std::get<_buffer_size>(p) == kernarg_size) {
+                    std::get<_released_pool>(p).push_back(kernarg_ptr);
                     return;
                 }
             }
@@ -3169,6 +3178,13 @@ public:
     friend class KernargBufferPools;
     std::shared_ptr<KernargBufferPools> kernargBufferPools;
 
+    uint32_t getSyncID() {
+        if (HCC_KERNARG_MANAGER) {
+            return kernargBufferPools->getSyncID();
+        }
+        return 0;
+    }
+
     bool isKernargCoarseGrained() {
         if (HCC_KERNARG_MANAGER) {
             return kernargBufferPools->isKernargCoarseGrained();
@@ -3176,12 +3192,12 @@ public:
         return false;
     }
 
-    void releaseKernargBuffer(const std::pair<void*, size_t>& b) {
+    void releaseKernargBuffer(const std::tuple<void*, size_t, uint32_t>& b) {
         if (HCC_KERNARG_MANAGER) {
             return kernargBufferPools->releaseKernargBuffer(b);
         }
-        else if (b.first) {
-            return releaseKernargBuffer(b.first, b.second);
+        else if (std::get<0>(b)) {
+            return releaseKernargBuffer(std::get<0>(b), std::get<1>(b));
         }
     }
 
@@ -3219,7 +3235,7 @@ public:
         };
     }
 
-    std::pair<void*, int> getKernargBuffer(size_t size) {
+    std::tuple<void*, size_t, uint32_t> getKernargBuffer(size_t size) {
 
         if (HCC_KERNARG_MANAGER) {
             return kernargBufferPools->getKernargBuffer(size);
@@ -3329,10 +3345,7 @@ public:
             cursor = -1;
             memset (ret, 0x00, size);
         }
-
-
-
-        return std::make_pair(ret, cursor);
+        return std::make_tuple(ret, cursor, 0);
     }
 
     void hdp_mem_flush() {
@@ -4282,6 +4295,11 @@ HSAQueue::HSAQueue(KalmarDevice* pDev, hsa_agent_t agent, execute_order order, q
 
     hsa_status_t status= hsa_signal_create(1, 1, &agent, &sync_copy_signal);
     STATUS_CHECK(status, __LINE__);
+
+    auto hsa_dev_ptr = reinterpret_cast<Kalmar::HSADevice*>(pDev);
+    if (hsa_dev_ptr->isKernargCoarseGrained()) {
+        set_last_kernarg_sync_id(hsa_dev_ptr->getSyncID() - 1);
+    }
 }
 
 
@@ -4746,19 +4764,26 @@ HSADispatch::dispatchKernel(hsa_queue_t* lockedHsaQueue, const void *hostKernarg
         header |= (HSA_PACKET_TYPE_KERNEL_DISPATCH << HSA_PACKET_HEADER_TYPE);
     }
 
-
     // bind kernel arguments
-    //printf("hostKernargSize size: %d in bytesn", hostKernargSize);
-
     if (hostKernargSize > 0) {
         kernargMemory = device->getKernargBuffer(hostKernargSize);
-        memcpy(kernargMemory.first, hostKernarg, hostKernargSize);
+        auto kernarg_ptr = std::get<0>(kernargMemory);
+        memcpy(kernarg_ptr, hostKernarg, hostKernargSize);
         if (device->isKernargCoarseGrained()) {
             // If kernarg is in GPU coarse grained memory, flush the HDP
             // content visible to the GPU
             device->hdp_mem_flush();
+            auto sync_id = std::get<2>(kernargMemory);
+            auto q_ptr = reinterpret_cast<Kalmar::HSAQueue*>(getQueue());
+            auto queue_last_kernarg_sync_id = q_ptr->get_last_kernarg_sync_id();
+            if (queue_last_kernarg_sync_id != sync_id) {
+                // kernarg buffers have been recycled, put a system scope acquire fence to
+                // clear the GPU cache to purge the content of staled kernarg buffers
+                header |= (HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE);
+                q_ptr->set_last_kernarg_sync_id(sync_id);
+            }
         }
-        aql.kernarg_address = kernargMemory.first;
+        aql.kernarg_address = kernarg_ptr;
     } else {
         aql.kernarg_address = nullptr;
     }
@@ -4900,9 +4925,10 @@ HSADispatch::dispose() {
     // call_once
     if (_dispose_flag.test_and_set()) return;
 
-    if (kernargMemory.first) {
+    if (std::get<0>(kernargMemory)) {
         device->releaseKernargBuffer(kernargMemory);
-        kernargMemory = {nullptr, 0};
+        constexpr decltype(kernargMemory) reset{nullptr, 0, 0};
+        kernargMemory = reset;
     }
     clearArgs();
     std::vector<uint8_t>().swap(arg_vec);
